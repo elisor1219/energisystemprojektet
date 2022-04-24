@@ -7,7 +7,7 @@ folder = dirname(@__FILE__)
 
 #Sets
 REGION = [:DE, :SE, :DK]
-PLANT = [:Wind, :PV, :Hydro, :Gas, :Nuclear] # Add all plants
+PLANT = [:Wind, :PV, :Hydro, :Gas] # Add all plants
 HOUR = 1:8760
 
 #Parameters
@@ -35,7 +35,6 @@ maxcaptable = [                                                             # GW
         :PV          460            75              60
         :Hydro       0              14               0
         :Gas       almostInf     almostInf       almostInf
-        :Nuclear   almostInf     almostInf       almostInf
         ]
 
 maxcap = AxisArray(maxcaptable[:,2:end]'.*1000, REGION, PLANT) # MW
@@ -46,7 +45,6 @@ costTable = [
         :PV              600*1000                     0.1                         0
         :Hydro            0*1000                      0.1                         0
         :Gas             550*1000                      2                          22
-        :Nuclear        7700*1000                      4                         3.2
         ]
 cost = AxisArray(costTable[:,2:end], PLANT, [:IC, :RC, :FC])
 
@@ -56,7 +54,6 @@ Lifetime = [
         :PV               25
         :Hydro            80
         :Gas              30
-        :Nuclear          50
         ]
 lifetime = AxisArray(vec(Lifetime[:,2:end]), PLANT)
 
@@ -66,7 +63,6 @@ Efficiency = [
         :PV                  1
         :Hydro               1
         :Gas                0.4
-        :Nuclear            0.4
         ]
 efficiency = AxisArray(vec(Efficiency[:,2:end]), PLANT)
 
@@ -76,7 +72,6 @@ EmissionFactor = [
         :PV                  0
         :Hydro               0
         :Gas               0.202
-        :Nuclear             0
         ]
 emissionFactor = AxisArray(vec(EmissionFactor[:,2:end]), PLANT)
 

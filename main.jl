@@ -15,7 +15,7 @@ function annualisedCost(investmentCost, years)
 end
 
 #Constans that will be used in the model
-RESERVOIR_MAX_SIZE = 33*1000000                             #[MW]
+RESERVOIR_MAX_SIZE = 33*1000000                             #[MWh]
 # NOT IN USE [(TWh*1 000 000) / h] = [MW]
 
 println("\nSetting variables...")
@@ -29,7 +29,7 @@ println("\nSetting variables...")
     RunnigCost[r in REGION, p in PLANT] >= 0                        #euro
     FuelCost[r in REGION, p in PLANT] >= 0                          #euro
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #euro
-    0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #MW
+    0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #MWh
 end
 
 println("\nSetting upper bounds...")
@@ -90,14 +90,16 @@ println("\nSetting constraints...")
         HydroReservoirStorage[h] <= HydroReservoirStorage[h-1] + inflow[h]
 
     #The outflow of "water" (power) in the hydro reservoir.
+    #TODO: 
     OUTFLOW_RESERVOIR[h in 2:HOUR[end]],
-        HydroReservoirStorage[h] <= HydroReservoirStorage[h-1] - Electricity[:SE, :Hydro, h-1]
+        HydroReservoirStorage[h] >= HydroReservoirStorage[h-1] - Electricity[:SE, :Hydro, h-1]
 
     #Sets the first day equal to the last day.
     EQUAL_RESERVOIR,
         HydroReservoirStorage[HOUR[1]] == HydroReservoirStorage[HOUR[end]]
 
     #The max power the hydro can produce becuse of the water in the reservoir.
+    #TODO:
     HYDRO_POWER[h in HOUR],
         Electricity[:SE, :Hydro, h] <= HydroReservoirStorage[h]
     
@@ -159,11 +161,11 @@ timeInterval = 147:651
 #timeInterval = HOUR
 
 SE_df = DataFrame(Hour=timeInterval, 
-                  Wind=HourPower[timeInterval,:Wind,:DE],
-                  Solar=HourPower[timeInterval,:PV,:DE],
-                  Hydro=HourPower[timeInterval,:Hydro,:DE],
-                  Gas=HourPower[timeInterval,:Gas,:DE],
-                  Nuclear=HourPower[timeInterval,:Nuclear,:DE]
+                  Wind=HourPower[timeInterval,:Wind,:SE],
+                  Solar=HourPower[timeInterval,:PV,:SE],
+                  Hydro=HourPower[timeInterval,:Hydro,:SE],
+                  Gas=HourPower[timeInterval,:Gas,:SE],
+                  #Nuclear=HourPower[timeInterval,:Nuclear,:SE]
 )
 
 long_SE_df = stack(SE_df, Not([:Hour]), variable_name="Production", value_name="MW")
