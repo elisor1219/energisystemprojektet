@@ -153,35 +153,83 @@ for h in HOUR, p in PLANT, r in REGION
 end
 
 
-#Here the plotting part begins the plotting part------------------------------
-#I think we need to take the avrage production for a day maybe.
+#Here begins the plotting part------------------------------
+time = 24*2
+newAvrageTime = 1:floor(Int,HOUR[end]/time)
+AverageDayPower = AxisArray(zeros(floor(Int,length(HOUR)/time), length(PLANT), length(REGION)), 1:HOUR[end]/time, PLANT, REGION)
+for d in newAvrageTime, p in PLANT, r in REGION
+    if d*time + time-1 > HOUR[end]
+        break
+    end
+    nextAvrage = HourPower[d*time:d*time+time-1,p,r]
+    average = sum(nextAvrage)/time
+    AverageDayPower[d,p,r] = average
+end
 
 #timeInterval = 147:147+23
 timeInterval = 147:651
 #timeInterval = HOUR
 
-SE_df = DataFrame(Hour=timeInterval, 
-                  Wind=HourPower[timeInterval,:Wind,:SE],
-                  Solar=HourPower[timeInterval,:PV,:SE],
-                  Hydro=HourPower[timeInterval,:Hydro,:SE],
-                  Gas=HourPower[timeInterval,:Gas,:SE],
-                  #Nuclear=HourPower[timeInterval,:Nuclear,:SE]
+
+#Ploting the average domestic generation of Sweden 
+SE_df = DataFrame(Hour=newAvrageTime, 
+                  Wind=AverageDayPower[newAvrageTime,:Wind,:SE],
+                  Solar=AverageDayPower[newAvrageTime,:PV,:SE],
+                  Gas=AverageDayPower[newAvrageTime,:Gas,:SE],
+                  Hydro=AverageDayPower[newAvrageTime,:Hydro,:SE],
 )
 
 long_SE_df = stack(SE_df, Not([:Hour]), variable_name="Production", value_name="MW")
 
+plot(long_SE_df,
+    kind="bar",
+    x=:Hour,
+    y=:MW,
+    color=:Production,
+    Layout(title="The twoday-average energy production Sweden",
+    barmode="stack",
+    bargap=0)
+ )
 
-#
-#CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\export_df.csv", SE_df)
-#
-plot(long_SE_df, kind="bar", x=:Hour, y=:MW, color=:Production, Layout(title="Energy production Sweden", barmode="stack", bargap=0))
 
-#
-#df = dataset(DataFrame, "tips")
-#plot(df, x=:total_bill, kind="histogram", color=:sex, Layout(barmode="stack"))
-#
-#
-#plot(timeInterval,HourPower[timeInterval,:,:SE])
-#plot(timeInterval,load[:SE,timeInterval])
-#
-#plot(HourPower[timeInterval,:,:SE], kind="bar", x=:hours, y=:MW, Layout(title="Long-Form Input", barmode="stack"))
+#Ploting the domestic generation of Sweden 
+SE_df = DataFrame(Hour=timeInterval, 
+                  Wind=HourPower[timeInterval,:Wind,:SE],
+                  Solar=HourPower[timeInterval,:PV,:SE],
+                  Gas=HourPower[timeInterval,:Gas,:SE],
+                  #Nuclear=HourPower[timeInterval,:Nuclear,:SE]
+                  Hydro=HourPower[timeInterval,:Hydro,:SE],
+)
+
+long_SE_df = stack(SE_df, Not([:Hour]), variable_name="Production", value_name="MW")
+
+plot(long_SE_df,
+    kind="bar",
+    x=:Hour,
+    y=:MW,
+    color=:Production,
+    Layout(title="Energy production Sweden",
+    barmode="stack",
+    bargap=0)
+ )
+
+
+#Ploting the domestic generation of Germany 
+DE_df = DataFrame(Hour=timeInterval,
+                  Wind=HourPower[timeInterval,:Wind,:DE],
+                  Solar=HourPower[timeInterval,:PV,:DE],
+                  Gas=HourPower[timeInterval,:Gas,:DE],
+                  #Nuclear=HourPower[timeInterval,:Nuclear,:DE]
+)
+
+long_DK_df = stack(DE_df, Not([:Hour]), variable_name="Production", value_name="MW")
+
+plot(long_DK_df,
+    kind="bar",
+    x=:Hour,
+    y=:MW,
+    color=:Production,
+    Layout(title="Energy production in Germany",
+    barmode="stack",
+    bargap=0)
+ )
