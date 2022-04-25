@@ -11,8 +11,8 @@ include("input_energisystemprojekt.jl")
         PV_cf, wind_cf = read_input()
 
 m = Model(Gurobi.Optimizer)
-set_optimizer_attribute(m, "NumericFocus", 3)
-set_optimizer_attribute(m, "BarHomogeneous", 1)
+#set_optimizer_attribute(m, "NumericFocus", 3)
+#set_optimizer_attribute(m, "BarHomogeneous", 1)
 
 function annualisedCost(investmentCost, years)
     investmentCost * ((discountrate)/(1-(1/((1+discountrate)^years))))
@@ -27,18 +27,12 @@ println("\nSetting variables...")
     #written in SCREAMING_SNAKE_CASE
     Electricity[r in REGION, p in PLANT, h in HOUR] >= 0            #In MW
     EnergyFuel[r in REGION, p in PLANT, h in HOUR] >= 0             #In MW
-    Capacity[r in REGION, p in PLANT] >= 0                          #In MW
-    Emission[r in REGION, p in PLANT] >= 0                          #ton CO_2
-    RunnigCost[r in REGION, p in PLANT] >= 0                        #euro
-    FuelCost[r in REGION, p in PLANT] >= 0                          #euro
-    AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #euro
-    0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #MWh
-    #0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #MW
-end
-
-println("\nSetting upper bounds...")
-for r in REGION, p in PLANT
-    set_upper_bound(Capacity[r, p], maxcap[r, p])
+    Emission[r in REGION, p in PLANT] >= 0                          #In ton CO_2
+    RunnigCost[r in REGION, p in PLANT] >= 0                        #In euro
+    FuelCost[r in REGION, p in PLANT] >= 0                          #In euro
+    AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
+    0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #In MWh
+    0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
 end
 
 #If the program is to slow we can,
@@ -49,11 +43,15 @@ end
 println("\nSetting constraints...")
 @constraints m begin
     GENARTION_CAPACITY[r in REGION, p in PLANT, h in HOUR],
-        Electricity[r, p, h] <= Capacity[r, p]
+        Electricity[r, p, h] <= InstalledCapacity[r, p]
 
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
         sum(Electricity[r, p, h] for p in PLANT) >= load[r, h]
+
+    #We need to install plants to be able to produce energy
+    #INSTALLED_CAPACITY[r in REGION, p in PLANT],
+    #   InstalledCapacity[r, p]
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
     EFFICIENCY_CONVERION[r in REGION, p in PLANT, h in HOUR],
@@ -65,7 +63,7 @@ println("\nSetting constraints...")
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
-        AnnualisedInvestment[r,p] >=  annualisedCost(cost[p,1]*sum(Electricity[r,p,h] for h in HOUR)/HOUR[end], lifetime[p])
+        AnnualisedInvestment[r,p] >=  annualisedCost(cost[p,1]*InstalledCapacity[r,p], lifetime[p])
 
     #The cost of the system per region.
     RUNNING_COST[r in REGION, p in PLANT],
@@ -81,12 +79,12 @@ println("\nSetting constraints...")
     #---Wind---
     #Wind can only produce when it is windy.
     WIND_OUTPUT[r in REGION, h in HOUR],
-        Electricity[r, :Wind, h] <= Capacity[r, :Wind] * wind_cf[r,h]
+        Electricity[r, :Wind, h] <= InstalledCapacity[r, :Wind] * wind_cf[r,h]
 
     #---Solar (PV)---
     #Solar can only produce durying the day.
     SOLAR_OUTPUT[r in REGION, h in HOUR],
-        Electricity[r, :PV, h] <= Capacity[r, :PV] * PV_cf[r,h]
+        Electricity[r, :PV, h] <= InstalledCapacity[r, :PV] * PV_cf[r,h]
 
     #---Hydro---
     #The inflow of "water" (power) in the hyrdo reservoir.
@@ -144,7 +142,6 @@ for r in REGION
 end
 
 systemCost = objective_value(m) # €
-Capacity_result = value.(Capacity)
 
 Emission = Emission*1000 # Ton CO_2 to CO_2 
 totalEmissionResult = value(sum(Emission)) # CO_2
@@ -371,19 +368,41 @@ p5 = plot(
         )
     )
 )
-relayout!(p, barmode="group")
+relayout!(p5, barmode="group")
+
+
+
+#Plotting the diffrent installed capacitys in the regions
+p6 = plot(
+    [
+        bar(name="Wind", x=region, y=value.(InstalledCapacity[:,:Wind])),
+        bar(name="Solar", x=region, y=value.(InstalledCapacity[:,:PV])),
+        bar(name="Gas", x=region, y=value.(InstalledCapacity[:,:Gas])),
+        bar(name="Hydro", x=region, y=value.(InstalledCapacity[:,:Hydro])),
+    ],
+    Layout(
+        title="Total capacity in diffrent regions and plants.",
+        yaxis_title="MW",
+        font=attr(
+            size=15,
+        )
+    )
+)
+relayout!(p6, barmode="group")
 
 display(p1)
 display(p2)
 display(p3)
 display(p4)
 display(p5)
+display(p6)
 
 savefig(p1, string(pathToFigures,"/germany.svg"))
 savefig(p2, string(pathToFigures,"/sweden.svg"))
 savefig(p3, string(pathToFigures,"/denmark.svg"))
 savefig(p4, string(pathToFigures,"/germany147-651.svg"))
 savefig(p5, string(pathToFigures,"/plants.svg"))
+savefig(p6, string(pathToFigures,"/capacity.svg"))
 
 
 
