@@ -33,6 +33,7 @@ println("\nSetting variables...")
     FuelCost[r in REGION, p in PLANT] >= 0                          #euro
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #euro
     0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #MWh
+    #0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #MW
 end
 
 println("\nSetting upper bounds...")
@@ -41,7 +42,7 @@ for r in REGION, p in PLANT
 end
 
 #If the program is to slow we can,
-#1) No calcualte the AnnualisedInvestment for Hydro because 
+#1) Not calcualte the AnnualisedInvestment for Hydro because 
 #   that will alwyas be 0.
 #2) Emission is only created from Gas
 
@@ -114,9 +115,10 @@ end
 
 println("\nSetting objective function...")
 @objective m Min begin
-    sum(sum(RunnigCost[r,p] for p in PLANT) for r in REGION) +
-    sum(sum(AnnualisedInvestment[r,p] for p in PLANT) for r in REGION) +
-    sum(sum(FuelCost[r,p] for p in PLANT) for r in REGION)
+    #sum(sum(RunnigCost[r,p] for p in PLANT) for r in REGION) +
+    #sum(sum(AnnualisedInvestment[r,p] for p in PLANT) for r in REGION) +
+    #sum(sum(FuelCost[r,p] for p in PLANT) for r in REGION)
+    sum(RunnigCost) + sum(AnnualisedInvestment) + sum(FuelCost)
 end
 
 
@@ -167,13 +169,12 @@ println("Total cost: ", format(systemCost, precision=0, commas=true ), " €")
 println("\tGermany: ", formatedValuesCost[:DE], " €")
 println("\tSweden: ", formatedValuesCost[:SE], " €")
 println("\tDenmark: ", formatedValuesCost[:DK], " €")
-println("\n")
+println("")
 println("Total emissions: ", format(totalEmissionResult, precision=0, commas=true ), " CO_2")
 println("\tGermany: ", formatedValuesCO_2[:DE], " CO_2")
 println("\tSweden: ", formatedValuesCO_2[:SE], " CO_2")
 println("\tDenmark: ", formatedValuesCO_2[:DK], " CO_2")
 #This part is for formating and printing the value of the cost and emission ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
-
 
 
 
@@ -189,6 +190,35 @@ HourPower = AxisArray(zeros(length(HOUR), length(PLANT), length(REGION)), HOUR, 
 for h in HOUR, p in PLANT, r in REGION
     HourPower[h,p,r] = value.(Electricity[r,p,h])
 end
+
+
+
+#Calculating "the average capacity factors for PV and Wind" v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+#Formating the values
+formatedValuesPV = AxisArray(Vector{Union{Nothing, String}}(nothing, length(REGION)), REGION)
+formatedValuesPV[:DE] = format(sum(HourPower[:,:PV,:DE])/length(HOUR), precision=0, commas=true )
+formatedValuesPV[:SE] = format(sum(HourPower[:,:PV,:SE])/length(HOUR), precision=0, commas=true )
+formatedValuesPV[:DK] = format(sum(HourPower[:,:PV,:DK])/length(HOUR), precision=0, commas=true )
+
+formatedValuesWind = AxisArray(Vector{Union{Nothing, String}}(nothing, length(REGION)), REGION)
+formatedValuesWind[:DE] = format(sum(HourPower[:,:Wind,:DE])/length(HOUR), precision=0, commas=true )
+formatedValuesWind[:SE] = format(sum(HourPower[:,:Wind,:SE])/length(HOUR), precision=0, commas=true )
+formatedValuesWind[:DK] = format(sum(HourPower[:,:Wind,:DK])/length(HOUR), precision=0, commas=true )
+
+
+#Printing the values
+println("- - - - - - - - - - - - - - - - - - - - - - - - - - - -")
+println("Average capacity PV: ")
+println("\tGermany: ", formatedValuesPV[:DE], " MW")
+println("\tSweden: ", formatedValuesPV[:SE], " MW")
+println("\tDenmark: ", formatedValuesPV[:DK], " MW")
+println("")
+println("Average capacity Wind: ")
+println("\tGermany: ", formatedValuesWind[:DE], " MW")
+println("\tSweden: ", formatedValuesWind[:SE], " MW")
+println("\tDenmark: ", formatedValuesWind[:DK], " MW")
+#Calculating "the average capacity factors for PV and Wind" ^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
 
 
 
@@ -227,9 +257,13 @@ p1 = plot(long_df,
     y=:MW,
     color=:Production,
     Layout(title="The twoday-average energy production in Germany",
-    barmode="stack",
-    bargap=0)
+        barmode="stack",
+        bargap=0,
+        font=attr(
+            size=15,
+        )
     )
+)
 
 
 
@@ -250,9 +284,13 @@ p2 = plot(long_df,
     y=:MW,
     color=:Production,
     Layout(title="The twoday-average energy production in Sweden",
-    barmode="stack",
-    bargap=0)
+        barmode="stack",
+        bargap=0,
+        font=attr(
+            size=15,
+        )
     )
+)
 
 
 
@@ -273,9 +311,13 @@ p3 = plot(long_df,
     y=:MW,
     color=:Production,
     Layout(title="The twoday-average energy production in Denmark",
-    barmode="stack",
-    bargap=0)
+        barmode="stack",
+        bargap=0,
+        font=attr(
+            size=15,
+        )
     )
+)
 
  
 
@@ -298,9 +340,13 @@ p4 = plot(long_df,
     y=:MW,
     color=:Production,
     Layout(title="Energy production in Germany between hour 147 and 651.",
-    barmode="stack",
-    bargap=0)
- )
+        barmode="stack",
+        bargap=0,
+        font=attr(
+            size=15,
+        )
+    )
+)
 
 
 
@@ -318,8 +364,11 @@ p5 = plot(
         bar(name="Hydro", x=region, y=Power[:,:Hydro]),
     ],
     Layout(
-        title="Energy production in diffrent regions and plants.",
-        yaxis_title="MW"
+        title="Total energy production in diffrent regions and plants.",
+        yaxis_title="MW",
+        font=attr(
+            size=15,
+        )
     )
 )
 relayout!(p, barmode="group")
