@@ -1,6 +1,6 @@
 using JuMP, AxisArrays ,Gurobi, UnPack, CSV, DataFrames, PlotlyJS, Format
 
-pathToFigures = "figures/exercise1"
+pathToFigures = "figures/exercise2"
 
 println("\nBuilding model...")
 include("input_energisystemprojekt.jl")
@@ -18,6 +18,9 @@ end
 
 #Constans that will be used in the model
 RESERVOIR_MAX_SIZE = 33*1000000                             #[MWh]
+MAX_EMISSION = (1.4419721323355423e11 /1000)* 0.4724          #Ton CO_2
+#MAX_EMISSION is form exercise1 and will firsly be converted to Ton CO_2 (from kg CO_2).
+#Then mult. by 0.1 to reduce the CO_2 emission by 90%.
 
 println("\nSetting variables...")
 @variables m begin
@@ -54,6 +57,10 @@ println("\nSetting constraints...")
     #The amount of CO_2 we are producing. (>= is more stable then ==)
     EMISSION[r in REGION, p in PLANT],
         Emission[r, p] >= emissionFactor[p] * sum(EnergyFuel[r, p, h] for h in HOUR)
+
+    #The cap on how much CO_2 we can produce.
+    MAX_EMISSION,
+        sum(sum(Emission[r,p] for p in PLANT) for r in REGION) <= MAX_EMISSION
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],

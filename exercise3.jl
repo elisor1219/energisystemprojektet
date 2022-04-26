@@ -1,9 +1,11 @@
 using JuMP, AxisArrays ,Gurobi, UnPack, CSV, DataFrames, PlotlyJS, Format
 
-pathToFigures = "figures/exercise1"
+pathToFigures = "figures/exercise3"
+plantsMinusBateries = [:Wind, :PV, :Hydro, :Gas]
+plantsMinusTransmission = [:Wind, :PV, :Hydro, :Gas, :Batteries]
 
 println("\nBuilding model...")
-include("input_energisystemprojekt.jl")
+include("input_energisystemprojekt_exercise3.jl")
 @unpack REGION, PLANT, HOUR, numregions, load, maxcap , cost,
         discountrate, lifetime, efficiency, emissionFactor, inflow,
         PV_cf, wind_cf = read_input()
@@ -11,32 +13,36 @@ include("input_energisystemprojekt.jl")
 m = Model(Gurobi.Optimizer)
 #set_optimizer_attribute(m, "NumericFocus", 3)
 #set_optimizer_attribute(m, "BarHomogeneous", 1)
+set_optimizer_attribute(m, "Method", 2)
 
 function annualisedCost(investmentCost, years)
     investmentCost * ((discountrate)/(1-(1/((1+discountrate)^years))))
 end
 
 #Constans that will be used in the model
-RESERVOIR_MAX_SIZE = 33*1000000                             #[MWh]
+RESERVOIR_MAX_SIZE = 33*1000000                                     #[MWh]
 
 println("\nSetting variables...")
 @variables m begin
     #Variables is written in UpperCamelCase and names of constraits are
     #written in SCREAMING_SNAKE_CASE
     Electricity[r in REGION, p in PLANT, h in HOUR] >= 0            #In MW
-    EnergyFuel[r in REGION, p in PLANT, h in HOUR] >= 0             #In MW
-    Emission[r in REGION, p in PLANT] >= 0                          #In ton CO_2
+    EnergyFuel[r in REGION, h in HOUR] >= 0                         #In MW
+    Emission[r in REGION] >= 0                                      #In ton CO_2
     RunnigCost[r in REGION, p in PLANT] >= 0                        #In euro
-    FuelCost[r in REGION, p in PLANT] >= 0                          #In euro
+    FuelCost[r in REGION] >= 0                                      #In euro
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
     0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #In MWh
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
+    BatteryStorage[r in REGION, h in HOUR] >= 0                     #In MWh
 end
 
 #If the program is to slow we can,
 #1) Not calcualte the AnnualisedInvestment for Hydro because 
 #   that will alwyas be 0.
-#2) Emission is only created from Gas
+#2) 
+
+#TODO: When adding nucler, remeber to add p in [:GAS, :Nucler] an so on.
 
 println("\nSetting constraints...")
 @constraints m begin
@@ -48,12 +54,12 @@ println("\nSetting constraints...")
         sum(Electricity[r, p, h] for p in PLANT) >= load[r, h]
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
-    EFFICIENCY_CONVERION[r in REGION, p in PLANT, h in HOUR],
-        EnergyFuel[r,p,h] == Electricity[r,p,h] / efficiency[p]
+    EFFICIENCY_CONVERION[r in REGION, h in HOUR],
+        EnergyFuel[r,h] >= Electricity[r,:Gas,h] / efficiency[:Gas]
 
     #The amount of CO_2 we are producing. (>= is more stable then ==)
-    EMISSION[r in REGION, p in PLANT],
-        Emission[r, p] >= emissionFactor[p] * sum(EnergyFuel[r, p, h] for h in HOUR)
+    EMISSION[r in REGION],
+        Emission[r] >= emissionFactor[:Gas] * sum(EnergyFuel[r, h] for h in HOUR)
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
@@ -64,8 +70,8 @@ println("\nSetting constraints...")
         RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
 
     #The price of the fuel cost. 
-    FUEL_COST[r in REGION, p in PLANT],
-        FuelCost[r,p] >= cost[p,3]*sum(EnergyFuel[r,p,h] for h in HOUR)
+    FUEL_COST[r in REGION],
+        FuelCost[r] >= cost[:Gas,3]*sum(EnergyFuel[r,h] for h in HOUR)
 
     #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 
@@ -90,7 +96,7 @@ println("\nSetting constraints...")
     #    HydroReservoirStorage[h] >= HydroReservoirStorage[h-1] - Electricity[:SE, :Hydro, h-1]
 
     OUT_IN_FLOW_RESERVOIR[h in 2:HOUR[end-1]],
-        HydroReservoirStorage[h+1] == HydroReservoirStorage[h] + inflow[h] - Electricity[:SE, :Hydro, h]
+        HydroReservoirStorage[h+1] <= HydroReservoirStorage[h] + inflow[h] - Electricity[:SE, :Hydro, h]
 
     #Sets the first day equal to the last day.
     EQUAL_RESERVOIR,
@@ -103,6 +109,69 @@ println("\nSetting constraints...")
     #Sets the HydroReservoirStorage to an initial value.
     HYDRO_INTIAL_SIZE,
         HydroReservoirStorage[1] == inflow[1]
+
+    #---Batteries---
+    #The inflow in the batteries. Taking away 10% to account fot the round trip efficiency. 
+    #INFLOW_STORAGE[r in REGION, p in PLANT, h in 2:HOUR[end]],
+        #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + (Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
+        #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + 1#(Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
+
+    #The outflow of the batteries.
+    OUT_IN_FLOW_STORAGE[r in REGION, h in 1:HOUR[end-1]],
+        BatteryStorage[r,h+1] <= BatteryStorage[r,h] + (sum(Electricity[r, p, h] for p in plantsMinusBateries)-load[r,h])*efficiency[:Batteries] - Electricity[r, :Batteries, h]
+
+    #The max power the batteries can produce becuse of the electricity in the storage.
+    BATTERY_POWER[r in REGION, h in HOUR],
+        Electricity[r, :Batteries, h] <= BatteryStorage[r,h]
+
+    #Sets the BatteryStorage to an initial value.
+    BATTERY_STORAGE_INTIAL_SIZE[r in REGION],
+        BatteryStorage[r,1] == 0
+
+    #---Transmission---
+    #Inflow to a region
+    #INFLOW_TRANSMISSION_DE[r in [:SE,:DK], h in HOUR],
+    #    Electricity[:DE, :Transmission, h] == (sum(Electricity[r, p, h] for p in plantsMinusTransmission)-load[r,h])*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_SE[r in [:DE,:DK], h in HOUR],
+    #    Electricity[:SE, :Transmission, h] == (sum(Electricity[r, p, h] for p in plantsMinusTransmission)-load[r,h])*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_DK[r in [:DE,:SE], h in HOUR],
+    #    Electricity[:DK, :Transmission, h] == (sum(Electricity[r, p, h] for p in plantsMinusTransmission)-load[r,h])*efficiency[:Transmission]
+    #INFLOW_TRANSMISSION_DE[r in REGION, h in HOUR]
+
+    #Inflow to a region
+    #INFLOW_TRANSMISSION_DE[r in REGION, h in HOUR],
+    #    Electricity[:DE, :Transmission, h] == Electricity[r, :Transmission, h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_SE[r in REGION, h in HOUR],
+    #    Electricity[:SE, :Transmission, h] == Electricity[r, :Transmission, h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_DK[r in REGION, h in HOUR],
+    #    Electricity[:DK, :Transmission, h] == Electricity[r, :Transmission, h]*efficiency[:Transmission]
+
+    #Inflow to a region
+    INFLOW_TRANSMISSION_DE_TO_SE[h in HOUR],
+        Electricity[:DE, :Transmission, h] == Electricity[:SE, :Transmission, h]
+
+    INFLOW_TRANSMISSION_DE_TO_DK[h in HOUR],
+        Electricity[:DE, :Transmission, h] == Electricity[:DK, :Transmission, h]
+
+    INFLOW_TRANSMISSION_SE_TO_DE[h in HOUR],
+        Electricity[:SE, :Transmission, h] == Electricity[:DE, :Transmission, h]
+
+    INFLOW_TRANSMISSION_SE_TO_DK[h in HOUR],
+        Electricity[:SE, :Transmission, h] == Electricity[:DK, :Transmission, h]
+
+    INFLOW_TRANSMISSION_DK_TO_DE[h in HOUR],
+        Electricity[:DK, :Transmission, h] == Electricity[:DE, :Transmission, h]
+
+    INFLOW_TRANSMISSION_DK_TO_SE[h in HOUR],
+        Electricity[:DK, :Transmission, h] == Electricity[:SE, :Transmission, h]
+
+
+
+
 
 end
 
@@ -133,7 +202,7 @@ regionCost = AxisArray(zeros(length(REGION)), REGION)
 for r in REGION
     regionCost[r] = value(sum(RunnigCost[r,p] for p in PLANT)) +
     value(sum(AnnualisedInvestment[r,p] for p in PLANT)) +
-    value(sum(FuelCost[r,p] for p in PLANT))
+    value(FuelCost[r])
 end
 
 systemCost = objective_value(m) # €
@@ -152,9 +221,9 @@ formatedValuesCost[:SE] = format(regionCost[:SE], precision=0, commas=true )
 formatedValuesCost[:DK] = format(regionCost[:DK], precision=0, commas=true )
 
 formatedValuesCO_2 = AxisArray(Vector{Union{Nothing, String}}(nothing, length(REGION)), REGION)
-formatedValuesCO_2[:DE] = format(value(Emission[:DE, :Gas]), precision=0, commas=true )
-formatedValuesCO_2[:SE] = format(value(Emission[:SE, :Gas]), precision=0, commas=true )
-formatedValuesCO_2[:DK] = format(value(Emission[:DK, :Gas]), precision=0, commas=true )
+formatedValuesCO_2[:DE] = format(value(Emission[:DE]), precision=0, commas=true )
+formatedValuesCO_2[:SE] = format(value(Emission[:SE]), precision=0, commas=true )
+formatedValuesCO_2[:DK] = format(value(Emission[:DK]), precision=0, commas=true )
 
 #Printing the values
 println("Total cost: ", format(systemCost, precision=0, commas=true ), " €")
@@ -239,6 +308,8 @@ df = DataFrame(TowDays=newAvrageTime,
                   Solar=AverageDayPower[newAvrageTime,:PV,:DE],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:DE],
                   Hydro=AverageDayPower[newAvrageTime,:Hydro,:DE],
+                  Batteries=AverageDayPower[newAvrageTime,:Batteries,:DE],
+                  Transmission=AverageDayPower[newAvrageTime,:Transmission,:DE]
 )
 
 long_df = stack(df, Not([:TowDays]), variable_name="Production", value_name="MW")
@@ -266,6 +337,8 @@ df = DataFrame(TowDays=newAvrageTime,
                   Solar=AverageDayPower[newAvrageTime,:PV,:SE],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:SE],
                   Hydro=AverageDayPower[newAvrageTime,:Hydro,:SE],
+                  Batteries=AverageDayPower[newAvrageTime,:Batteries,:SE],
+                  Transmission=AverageDayPower[newAvrageTime,:Transmission,:SE]
 )
 
 long_df = stack(df, Not([:TowDays]), variable_name="Production", value_name="MW")
@@ -293,6 +366,8 @@ df = DataFrame(TowDays=newAvrageTime,
                   Solar=AverageDayPower[newAvrageTime,:PV,:DK],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:DK],
                   Hydro=AverageDayPower[newAvrageTime,:Hydro,:DK],
+                  Batteries=AverageDayPower[newAvrageTime,:Batteries,:DK],
+                  Transmission=AverageDayPower[newAvrageTime,:Transmission,:DK]
 )
 
 long_df = stack(df, Not([:TowDays]), variable_name="Production", value_name="MW")
@@ -321,7 +396,9 @@ df = DataFrame(Hour=timeInterval,
                   Wind=HourPower[timeInterval,:Wind,:DE],
                   Solar=HourPower[timeInterval,:PV,:DE],
                   Gas=HourPower[timeInterval,:Gas,:DE],
-                  #Nuclear=HourPower[timeInterval,:Nuclear,:DE]
+                  Hydro=HourPower[timeInterval,:Hydro,:DE],
+                  Batteries=HourPower[timeInterval,:Batteries,:DE],
+                  Transmission=HourPower[timeInterval,:Transmission,:DE]
 )
 
 long_df = stack(df, Not([:Hour]), variable_name="Production", value_name="MW")
@@ -354,6 +431,8 @@ p5 = plot(
         bar(name="Solar", x=region, y=Power[:,:PV]),
         bar(name="Gas", x=region, y=Power[:,:Gas]),
         bar(name="Hydro", x=region, y=Power[:,:Hydro]),
+        bar(name="Batteries", x=region, y=Power[:,:Batteries]),
+        bar(name="Transmission", x=region, y=Power[:,:Transmission])
     ],
     Layout(
         title="Total energy production in diffrent regions and plants.",
@@ -374,6 +453,8 @@ p6 = plot(
         bar(name="Solar", x=region, y=value.(InstalledCapacity[:,:PV])),
         bar(name="Gas", x=region, y=value.(InstalledCapacity[:,:Gas])),
         bar(name="Hydro", x=region, y=value.(InstalledCapacity[:,:Hydro])),
+        bar(name="Batteries", x=region, y=value.(InstalledCapacity[:,:Batteries])),
+        bar(name="Transmission", x=region, y=value.(InstalledCapacity[:,:Transmission]))
     ],
     Layout(
         title="Total capacity in diffrent regions and plants.",
