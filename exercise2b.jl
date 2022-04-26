@@ -1,7 +1,6 @@
 using JuMP, AxisArrays ,Gurobi, UnPack, CSV, DataFrames, PlotlyJS, Format
 
 pathToFigures = "figures/exercise2"
-plantsMinusBateries = [:Wind, :PV, :Hydro, :Gas]
 
 println("\nBuilding model...")
 include("input_energisystemprojekt_exercise2b.jl")
@@ -10,8 +9,8 @@ include("input_energisystemprojekt_exercise2b.jl")
         PV_cf, wind_cf = read_input()
 
 m = Model(Gurobi.Optimizer)
-#set_optimizer_attribute(m, "NumericFocus", 3)
-#set_optimizer_attribute(m, "BarHomogeneous", 1)
+set_optimizer_attribute(m, "NumericFocus", 1)
+set_optimizer_attribute(m, "BarHomogeneous", 1)
 
 function annualisedCost(investmentCost, years)
     investmentCost * ((discountrate)/(1-(1/((1+discountrate)^years))))
@@ -32,15 +31,30 @@ println("\nSetting variables...")
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
     0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #In MWh
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
-    #I am thinking of creating the batteries in the 
+    #I am thinking of creating the batteries in the
     #same way I created hydro.
     BatteryStorage[r in REGION, h in HOUR] >= 0                                #In MWh
+    OverflowProduction[r in REGION, h in HOUR] >= 0                 #In MW
 end
 
+#df_DE = CSV.read("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDE_Exer2b.csv", DataFrame)
+#df_SE = CSV.read("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptSE_Exer2b.csv", DataFrame)
+#df_DE = CSV.read("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDK_Exer2b.csv", DataFrame)
+#for p in PLANT, h in HOUR
+#    set_start_value(Electricity[:DE,p,h],df_DE[!,p][h])
+#end
+#for p in PLANT, h in HOUR
+#    set_start_value(Electricity[:SE,p,h],df_DE[!,p][h])
+#end
+#for p in PLANT, h in HOUR
+#    set_start_value(Electricity[:DK,p,h],df_DE[!,p][h])
+#end
+
+
 #If the program is to slow we can,
-#1) Not calcualte the AnnualisedInvestment for Hydro because 
+#1) Not calcualte the AnnualisedInvestment for Hydro because
 #   that will alwyas be 0.
-#2) 
+#2)
 
 #TODO: When adding nucler, remeber to add p in [:GAS, :Nucler] an so on.
 
@@ -69,13 +83,16 @@ println("\nSetting constraints...")
     RUNNING_COST[r in REGION, p in PLANT],
         RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
 
-    #The price of the fuel cost. 
+    #The price of the fuel cost.
     FUEL_COST[r in REGION],
         FuelCost[r] >= cost[:Gas,3]*sum(EnergyFuel[r,h] for h in HOUR)
 
+    OVERFLOW_PRODUCTION[r in REGION, h in HOUR],
+        OverflowProduction[r, h] <= sum(Electricity[r, p, h] for p in PLANT)-load[r,h]
+
     #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 
-    
+
     #---Wind---
     #Wind can only produce when it is windy.
     WIND_OUTPUT[r in REGION, h in HOUR],
@@ -105,20 +122,20 @@ println("\nSetting constraints...")
     #The max power the hydro can produce becuse of the water in the reservoir.
     HYDRO_POWER[h in HOUR],
         Electricity[:SE, :Hydro, h] <= HydroReservoirStorage[h]
-    
+
     #Sets the HydroReservoirStorage to an initial value.
     HYDRO_INTIAL_SIZE,
         HydroReservoirStorage[1] == inflow[1]
 
     #---Batteries---
-    #The inflow in the batteries. Taking away 10% to account fot the round trip efficiency. 
+    #The inflow in the batteries. Taking away 10% to account fot the round trip efficiency.
     #INFLOW_STORAGE[r in REGION, p in PLANT, h in 2:HOUR[end]],
         #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + (Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
         #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + 1#(Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
 
     #The outflow of the batteries.
     OUT_IN_FLOW_STORAGE[r in REGION, h in 1:HOUR[end-1]],
-        BatteryStorage[r,h+1] == BatteryStorage[r,h] + (sum(Electricity[r, p, h] for p in plantsMinusBateries)-load[r,h])*efficiency[:Batteries] - Electricity[r, :Batteries, h]
+        BatteryStorage[r,h+1] == BatteryStorage[r,h] + OverflowProduction[r,h]*efficiency[:Batteries] - Electricity[r, :Batteries, h]
 
     #The max power the batteries can produce becuse of the electricity in the storage.
     BATTERY_POWER[r in REGION, h in HOUR],
@@ -162,7 +179,7 @@ end
 
 systemCost = objective_value(m) # €
 
-Emission = Emission*1000 # Ton CO_2 to CO_2 
+Emission = Emission*1000 # Ton CO_2 to CO_2
 totalEmissionResult = value(sum(Emission)) # CO_2
 
 
@@ -258,7 +275,7 @@ timeInterval = 147:651
 
 
 #Ploting the average domestic generation of Germany v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-df = DataFrame(TowDays=newAvrageTime, 
+df = DataFrame(TowDays=newAvrageTime,
                   Wind=AverageDayPower[newAvrageTime,:Wind,:DE],
                   Solar=AverageDayPower[newAvrageTime,:PV,:DE],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:DE],
@@ -286,7 +303,7 @@ p1 = plot(long_df,
 
 
 #Ploting the average domestic generation of Sweden v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-df = DataFrame(TowDays=newAvrageTime, 
+df = DataFrame(TowDays=newAvrageTime,
                   Wind=AverageDayPower[newAvrageTime,:Wind,:SE],
                   Solar=AverageDayPower[newAvrageTime,:PV,:SE],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:SE],
@@ -314,7 +331,7 @@ p2 = plot(long_df,
 
 
 #Ploting the average domestic generation of Denmark v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-df = DataFrame(TowDays=newAvrageTime, 
+df = DataFrame(TowDays=newAvrageTime,
                   Wind=AverageDayPower[newAvrageTime,:Wind,:DK],
                   Solar=AverageDayPower[newAvrageTime,:PV,:DK],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:DK],
@@ -338,7 +355,7 @@ p3 = plot(long_df,
     )
 )
 
- 
+
 
 
 
@@ -431,4 +448,30 @@ savefig(p6, string(pathToFigures,"/capacity.svg"))
 
 
 
-
+##Exporting some optimal values to a CSV file
+#df = DataFrame(Hour=HOUR,
+#                  Wind=HourPower[HOUR,:Wind,:DE],
+#                  PV=HourPower[HOUR,:PV,:DE],
+#                  Gas=HourPower[HOUR,:Gas,:DE],
+#                  Hydro=HourPower[HOUR,:Hydro,:DE],
+#                  Batteries=HourPower[HOUR,:Batteries,:DE],
+#)
+#CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDE_Exer2b.csv", df)
+#
+#df = DataFrame(Hour=HOUR,
+#                  Wind=HourPower[HOUR,:Wind,:SE],
+#                  PV=HourPower[HOUR,:PV,:SE],
+#                  Gas=HourPower[HOUR,:Gas,:SE],
+#                  Hydro=HourPower[HOUR,:Hydro,:SE],
+#                  Batteries=HourPower[HOUR,:Batteries,:SE],
+#)
+#CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptSE_Exer2b.csv", df)
+#
+#df = DataFrame(Hour=HOUR,
+#                  Wind=HourPower[HOUR,:Wind,:DK],
+#                  PV=HourPower[HOUR,:PV,:DK],
+#                  Gas=HourPower[HOUR,:Gas,:DK],
+#                  Hydro=HourPower[HOUR,:Hydro,:DK],
+#                  Batteries=HourPower[HOUR,:Batteries,:DK],
+#)
+#CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDK_Exer2b.csv", df)

@@ -28,7 +28,8 @@ for r in REGION
         inflow[:SE,:]=timeseries[:, "Hydro_inflow"]             # [MWh]
 end
 
-almostInf = typemax(Int)/1000
+#almostInf = typemax(Int)/1000
+almostInf = 1000
 maxcaptable = [                                                             # GW
         # PLANT      DE             SE              DK
         :Wind        180            280             90

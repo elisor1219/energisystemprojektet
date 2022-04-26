@@ -1,8 +1,6 @@
 using JuMP, AxisArrays ,Gurobi, UnPack, CSV, DataFrames, PlotlyJS, Format
 
 pathToFigures = "figures/exercise3"
-plantsMinusBateries = [:Wind, :PV, :Hydro, :Gas]
-plantsMinusTransmission = [:Wind, :PV, :Hydro, :Gas, :Batteries]
 
 println("\nBuilding model...")
 include("input_energisystemprojekt_exercise3.jl")
@@ -11,9 +9,9 @@ include("input_energisystemprojekt_exercise3.jl")
         PV_cf, wind_cf = read_input()
 
 m = Model(Gurobi.Optimizer)
-#set_optimizer_attribute(m, "NumericFocus", 3)
-#set_optimizer_attribute(m, "BarHomogeneous", 1)
-set_optimizer_attribute(m, "Method", 2)
+set_optimizer_attribute(m, "NumericFocus", 1)
+set_optimizer_attribute(m, "BarHomogeneous", 1)
+#set_optimizer_attribute(m, "Method", 2)
 
 function annualisedCost(investmentCost, years)
     investmentCost * ((discountrate)/(1-(1/((1+discountrate)^years))))
@@ -35,7 +33,14 @@ println("\nSetting variables...")
     0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #In MWh
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
     BatteryStorage[r in REGION, h in HOUR] >= 0                     #In MWh
+    OverflowProduction[r in REGION, p in [:Batteries, :Transmission],  h in HOUR] >= 0                 #In MW
+    TransmissionFromTo[r1 in REGION, r2 in REGION, h in HOUR]         #In MW
 end
+
+for r in REGION, h in HOUR
+    set_upper_bound(TransmissionFromTo[r,r,h],0)
+end
+#set_start_value(Electricity,)
 
 #If the program is to slow we can,
 #1) Not calcualte the AnnualisedInvestment for Hydro because 
@@ -72,6 +77,19 @@ println("\nSetting constraints...")
     #The price of the fuel cost. 
     FUEL_COST[r in REGION],
         FuelCost[r] >= cost[:Gas,3]*sum(EnergyFuel[r,h] for h in HOUR)
+
+    #The overflow production
+    #OVERFLOW_PRODUCTION_BATTERIES[r in REGION, h in HOUR],
+    #    OverflowProduction[r, :Batteries, h] <= sum(Electricity[r, p, h] for p in plantsMinusBateries)-load[r,h]
+
+    #OVERFLOW_PRODUCTION_TRANSMISSION[r in REGION, h in HOUR],
+    #    OverflowProduction[r, :Transmission, h] <= sum(Electricity[r, p, h] for p in plantsMinusTransmission)-load[r,h]
+    
+    #OVERFLOW_PRODUCTION_EQUALS[r in REGION, h in HOUR],
+    #    OverflowProduction[r, :Batteries, h] == OverflowProduction[r, :Transmission, h]
+
+    OVERFLOW_PRODUCTION[r in REGION, h in HOUR],
+        OverflowProduction[r, :Batteries, h] + OverflowProduction[r, :Transmission, h] <= sum(Electricity[r, p, h] for p in PLANT)-load[r,h]
 
     #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 
@@ -118,7 +136,7 @@ println("\nSetting constraints...")
 
     #The outflow of the batteries.
     OUT_IN_FLOW_STORAGE[r in REGION, h in 1:HOUR[end-1]],
-        BatteryStorage[r,h+1] <= BatteryStorage[r,h] + (sum(Electricity[r, p, h] for p in plantsMinusBateries)-load[r,h])*efficiency[:Batteries] - Electricity[r, :Batteries, h]
+        BatteryStorage[r,h+1] == BatteryStorage[r,h] + OverflowProduction[r,:Batteries,h]*efficiency[:Batteries] - Electricity[r, :Batteries, h]
 
     #The max power the batteries can produce becuse of the electricity in the storage.
     BATTERY_POWER[r in REGION, h in HOUR],
@@ -131,14 +149,43 @@ println("\nSetting constraints...")
     #---Transmission---
     #Inflow to a region
     #INFLOW_TRANSMISSION_DE[r in [:SE,:DK], h in HOUR],
-    #    Electricity[:DE, :Transmission, h] == (sum(Electricity[r, p, h] for p in plantsMinusTransmission)-load[r,h])*efficiency[:Transmission]
+     #   Electricity[:DE, :Transmission, h] == OverflowProduction[r,:Transmission,h]*efficiency[:Transmission]
 
     #INFLOW_TRANSMISSION_SE[r in [:DE,:DK], h in HOUR],
-    #    Electricity[:SE, :Transmission, h] == (sum(Electricity[r, p, h] for p in plantsMinusTransmission)-load[r,h])*efficiency[:Transmission]
+    #    Electricity[:SE, :Transmission, h] == OverflowProduction[r,:Transmission,h]*efficiency[:Transmission]
 
     #INFLOW_TRANSMISSION_DK[r in [:DE,:SE], h in HOUR],
-    #    Electricity[:DK, :Transmission, h] == (sum(Electricity[r, p, h] for p in plantsMinusTransmission)-load[r,h])*efficiency[:Transmission]
-    #INFLOW_TRANSMISSION_DE[r in REGION, h in HOUR]
+    #    Electricity[:DK, :Transmission, h] == OverflowProduction[r,:Transmission,h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_DE_TO_SE[h in HOUR],
+    #    TransmissionFromTo[:DE,:SE,h] == OverflowProduction[:DE,:Transmission,h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_DE_TO_DK[h in HOUR],
+    #    TransmissionFromTo[:DE,:DK,h] == OverflowProduction[:DE,:Transmission,h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_SE_TO_DE[h in HOUR],
+    #    TransmissionFromTo[:SE,:SE,h] == OverflowProduction[:SE,:Transmission,h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_SE_TO_DK[h in HOUR],
+    #    TransmissionFromTo[:SE,:DK,h] == OverflowProduction[:SE,:Transmission,h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_DK_TO_DE[h in HOUR],
+    #    TransmissionFromTo[:DK,:DE,h] == OverflowProduction[:DK,:Transmission,h]*efficiency[:Transmission]
+
+    #INFLOW_TRANSMISSION_DK_TO_SE[h in HOUR],
+    #    TransmissionFromTo[:DK,:SE,h] == OverflowProduction[:DK,:Transmission,h]*efficiency[:Transmission]
+
+    INFLOW_TRANSMISSION_DE_TO_SE_AND_DK[h in HOUR],
+        TransmissionFromTo[:DE,:SE,h] + TransmissionFromTo[:DE,:DK,h] == OverflowProduction[:DE,:Transmission,h]*efficiency[:Transmission]
+
+    INFLOW_TRANSMISSION_SE_TO_DE_AND_DK[h in HOUR],
+        TransmissionFromTo[:SE,:DE,h] + TransmissionFromTo[:SE,:DK,h] == OverflowProduction[:SE,:Transmission,h]*efficiency[:Transmission]
+
+    INFLOW_TRANSMISSION_DK_TO_DE_AND_SE[h in HOUR],
+        TransmissionFromTo[:DK,:DE,h] + TransmissionFromTo[:DK,:SE,h] == OverflowProduction[:DK,:Transmission,h]*efficiency[:Transmission]
+
+    TRANSMISSION_TO_ELECTRICITY[r in REGION, h in HOUR],
+        Electricity[r, :Transmission, h] == sum(TransmissionFromTo[i,r,h] for i in REGION)
 
     #Inflow to a region
     #INFLOW_TRANSMISSION_DE[r in REGION, h in HOUR],
@@ -151,23 +198,23 @@ println("\nSetting constraints...")
     #    Electricity[:DK, :Transmission, h] == Electricity[r, :Transmission, h]*efficiency[:Transmission]
 
     #Inflow to a region
-    INFLOW_TRANSMISSION_DE_TO_SE[h in HOUR],
-        Electricity[:DE, :Transmission, h] == Electricity[:SE, :Transmission, h]
+    #INFLOW_TRANSMISSION_DE_TO_SE[h in HOUR],
+    #    Electricity[:DE, :Transmission, h] == Electricity[:SE, :Transmission, h]
 
-    INFLOW_TRANSMISSION_DE_TO_DK[h in HOUR],
-        Electricity[:DE, :Transmission, h] == Electricity[:DK, :Transmission, h]
+    #INFLOW_TRANSMISSION_DE_TO_DK[h in HOUR],
+    #    Electricity[:DE, :Transmission, h] == Electricity[:DK, :Transmission, h]
 
-    INFLOW_TRANSMISSION_SE_TO_DE[h in HOUR],
-        Electricity[:SE, :Transmission, h] == Electricity[:DE, :Transmission, h]
+    #INFLOW_TRANSMISSION_SE_TO_DE[h in HOUR],
+    #    Electricity[:SE, :Transmission, h] == Electricity[:DE, :Transmission, h]
 
-    INFLOW_TRANSMISSION_SE_TO_DK[h in HOUR],
-        Electricity[:SE, :Transmission, h] == Electricity[:DK, :Transmission, h]
+    #INFLOW_TRANSMISSION_SE_TO_DK[h in HOUR],
+    #    Electricity[:SE, :Transmission, h] == Electricity[:DK, :Transmission, h]
 
-    INFLOW_TRANSMISSION_DK_TO_DE[h in HOUR],
-        Electricity[:DK, :Transmission, h] == Electricity[:DE, :Transmission, h]
+    #INFLOW_TRANSMISSION_DK_TO_DE[h in HOUR],
+    #    Electricity[:DK, :Transmission, h] == Electricity[:DE, :Transmission, h]
 
-    INFLOW_TRANSMISSION_DK_TO_SE[h in HOUR],
-        Electricity[:DK, :Transmission, h] == Electricity[:SE, :Transmission, h]
+    #INFLOW_TRANSMISSION_DK_TO_SE[h in HOUR],
+    #    Electricity[:DK, :Transmission, h] == Electricity[:SE, :Transmission, h]
 
 
 
@@ -482,4 +529,33 @@ savefig(p6, string(pathToFigures,"/capacity.svg"))
 
 
 
+#Exporting some optimal values to a CSV file
+df = DataFrame(Hour=HOUR,
+                  Wind=HourPower[HOUR,:Wind,:DE],
+                  Solar=HourPower[HOUR,:PV,:DE],
+                  Gas=HourPower[HOUR,:Gas,:DE],
+                  Hydro=HourPower[HOUR,:Hydro,:DE],
+                  Batteries=HourPower[HOUR,:Batteries,:DE],
+                  Transmission=HourPower[HOUR,:Transmission,:DE]
+)
+CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDE_Exer3.csv", df)
 
+df = DataFrame(Hour=HOUR,
+                  Wind=HourPower[HOUR,:Wind,:SE],
+                  Solar=HourPower[HOUR,:PV,:SE],
+                  Gas=HourPower[HOUR,:Gas,:SE],
+                  Hydro=HourPower[HOUR,:Hydro,:SE],
+                  Batteries=HourPower[HOUR,:Batteries,:SE],
+                  Transmission=HourPower[HOUR,:Transmission,:SE]
+)
+CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptSE_Exer3.csv", df)
+
+df = DataFrame(Hour=HOUR,
+                  Wind=HourPower[HOUR,:Wind,:DK],
+                  Solar=HourPower[HOUR,:PV,:DK],
+                  Gas=HourPower[HOUR,:Gas,:DK],
+                  Hydro=HourPower[HOUR,:Hydro,:DK],
+                  Batteries=HourPower[HOUR,:Batteries,:DK],
+                  Transmission=HourPower[HOUR,:Transmission,:DK]
+)
+CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDK_Exer3.csv", df)

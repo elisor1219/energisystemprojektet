@@ -34,7 +34,7 @@ println("\nSetting variables...")
 end
 
 #If the program is to slow we can,
-#1) Not calcualte the AnnualisedInvestment for Hydro because 
+#1) Not calcualte the AnnualisedInvestment for Hydro because
 #   that will alwyas be 0.
 #2) Emission is only created from Gas
 
@@ -63,13 +63,13 @@ println("\nSetting constraints...")
     RUNNING_COST[r in REGION, p in PLANT],
         RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
 
-    #The price of the fuel cost. 
+    #The price of the fuel cost.
     FUEL_COST[r in REGION, p in PLANT],
         FuelCost[r,p] >= cost[p,3]*sum(EnergyFuel[r,p,h] for h in HOUR)
 
     #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 
-    
+
     #---Wind---
     #Wind can only produce when it is windy.
     WIND_OUTPUT[r in REGION, h in HOUR],
@@ -99,7 +99,7 @@ println("\nSetting constraints...")
     #The max power the hydro can produce becuse of the water in the reservoir.
     HYDRO_POWER[h in HOUR],
         Electricity[:SE, :Hydro, h] <= HydroReservoirStorage[h]
-    
+
     #Sets the HydroReservoirStorage to an initial value.
     HYDRO_INTIAL_SIZE,
         HydroReservoirStorage[1] == inflow[1]
@@ -138,7 +138,7 @@ end
 
 systemCost = objective_value(m) # €
 
-Emission = Emission*1000 # Ton CO_2 to CO_2 
+Emission = Emission*1000 # Ton CO_2 to CO_2
 totalEmissionResult = value(sum(Emission)) # CO_2
 
 
@@ -234,7 +234,7 @@ timeInterval = 147:651
 
 
 #Ploting the average domestic generation of Germany v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-df = DataFrame(TowDays=newAvrageTime, 
+df = DataFrame(TowDays=newAvrageTime,
                   Wind=AverageDayPower[newAvrageTime,:Wind,:DE],
                   Solar=AverageDayPower[newAvrageTime,:PV,:DE],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:DE],
@@ -261,7 +261,7 @@ p1 = plot(long_df,
 
 
 #Ploting the average domestic generation of Sweden v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-df = DataFrame(TowDays=newAvrageTime, 
+df = DataFrame(TowDays=newAvrageTime,
                   Wind=AverageDayPower[newAvrageTime,:Wind,:SE],
                   Solar=AverageDayPower[newAvrageTime,:PV,:SE],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:SE],
@@ -288,7 +288,7 @@ p2 = plot(long_df,
 
 
 #Ploting the average domestic generation of Denmark v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-df = DataFrame(TowDays=newAvrageTime, 
+df = DataFrame(TowDays=newAvrageTime,
                   Wind=AverageDayPower[newAvrageTime,:Wind,:DK],
                   Solar=AverageDayPower[newAvrageTime,:PV,:DK],
                   Gas=AverageDayPower[newAvrageTime,:Gas,:DK],
@@ -311,7 +311,7 @@ p3 = plot(long_df,
     )
 )
 
- 
+
 
 
 
@@ -398,7 +398,3 @@ savefig(p3, string(pathToFigures,"/denmark.svg"))
 savefig(p4, string(pathToFigures,"/germany147-651.svg"))
 savefig(p5, string(pathToFigures,"/plants.svg"))
 savefig(p6, string(pathToFigures,"/capacity.svg"))
-
-
-
-
