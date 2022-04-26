@@ -1,12 +1,14 @@
 using JuMP, AxisArrays ,Gurobi, UnPack, CSV, DataFrames, PlotlyJS, Format
 
-pathToFigures = "figures/exercise3"
+pathToFigures = "figures/exercise4"
 
 println("\nBuilding model...")
-include("input_energisystemprojekt_exercise3.jl")
+include("input_energisystemprojekt_exercise4.jl")
 @unpack REGION, PLANT, HOUR, numregions, load, maxcap , cost,
         discountrate, lifetime, efficiency, emissionFactor, inflow,
         PV_cf, wind_cf = read_input()
+
+plantsWithFuel = [:Gas, :Nuclear]
 
 m = Model(Gurobi.Optimizer)
 set_optimizer_attribute(m, "NumericFocus", 1)
@@ -25,10 +27,10 @@ println("\nSetting variables...")
     #Variables is written in UpperCamelCase and names of constraits are
     #written in SCREAMING_SNAKE_CASE
     Electricity[r in REGION, p in PLANT, h in HOUR] >= 0            #In MW
-    EnergyFuel[r in REGION, h in HOUR] >= 0                         #In MW
+    EnergyFuel[r in REGION, p in plantsWithFuel, h in HOUR] >= 0                         #In MW
     Emission[r in REGION] >= 0                                      #In ton CO_2
     RunnigCost[r in REGION, p in PLANT] >= 0                        #In euro
-    FuelCost[r in REGION] >= 0                                      #In euro
+    FuelCost[r in REGION, p in plantsWithFuel] >= 0                                      #In euro
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
     0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #In MWh
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
@@ -62,12 +64,12 @@ println("\nSetting constraints...")
         sum(Electricity[r, p, h] for p in PLANT) - BatteryInflow[r,h] - TransmissionOutflow[r,h] >= load[r, h]
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
-    EFFICIENCY_CONVERION[r in REGION, h in HOUR],
-        EnergyFuel[r,h] >= Electricity[r,:Gas,h] / efficiency[:Gas]
+    EFFICIENCY_CONVERION[r in REGION, p in plantsWithFuel, h in HOUR],
+        EnergyFuel[r,p,h] >= Electricity[r,p,h] / efficiency[p]
 
     #The amount of CO_2 we are producing. (>= is more stable then ==)
     EMISSION[r in REGION],
-        Emission[r] >= emissionFactor[:Gas] * sum(EnergyFuel[r, h] for h in HOUR)
+        Emission[r] >= emissionFactor[:Gas] * sum(EnergyFuel[r,:Gas,h] for h in HOUR)
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
@@ -78,8 +80,8 @@ println("\nSetting constraints...")
         RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
 
     #The price of the fuel cost.
-    FUEL_COST[r in REGION],
-        FuelCost[r] >= cost[:Gas,3]*sum(EnergyFuel[r,h] for h in HOUR)
+    FUEL_COST[r in REGION, p in plantsWithFuel],
+        FuelCost[r,p] >= cost[p,3]*sum(EnergyFuel[r,p,h] for h in HOUR)
 
     #The overflow production
     #OVERFLOW_PRODUCTION_BATTERIES[r in REGION, h in HOUR],
@@ -205,10 +207,6 @@ println("\nSetting constraints...")
     TRANSMISSION_TO_ELECTRICITY[r in REGION, h in HOUR],
         Electricity[r, :Transmission, h] == sum(TransmissionFromTo[i,r,h] for i in REGION)
 
-    #SEND_CAPACITY[r in REGION, h in HOUR],
-    #    TransmissionOutflow[r,h] <= InstalledCapacity[r,:Transmission]
-    #TODO: This code thing dose not work
-
     #Inflow to a region
     #INFLOW_TRANSMISSION_DE[r in REGION, h in HOUR],
     #    Electricity[:DE, :Transmission, h] == Electricity[r, :Transmission, h]*efficiency[:Transmission]
@@ -271,7 +269,7 @@ regionCost = AxisArray(zeros(length(REGION)), REGION)
 for r in REGION
     regionCost[r] = value(sum(RunnigCost[r,p] for p in PLANT)) +
     value(sum(AnnualisedInvestment[r,p] for p in PLANT)) +
-    value(FuelCost[r])
+    value(sum(FuelCost[r,p] for p in plantsWithFuel))
 end
 
 systemCost = objective_value(m) # €
@@ -395,6 +393,7 @@ df = DataFrame(TowDays=newAvrageTime,
                   Hydro=AverageDayPower[newAvrageTime,:Hydro,:DE],
                   Batteries=AverageDayPower[newAvrageTime,:Batteries,:DE],
                   Transmission=AverageDayPower[newAvrageTime,:Transmission,:DE],
+                  Nuclear=AverageDayPower[newAvrageTime,:Nuclear,:DE]
 )
 
 long_df = stack(df, Not([:TowDays]), variable_name="Production", value_name="MW")
@@ -424,6 +423,7 @@ df = DataFrame(TowDays=newAvrageTime,
                   Hydro=AverageDayPower[newAvrageTime,:Hydro,:SE],
                   Batteries=AverageDayPower[newAvrageTime,:Batteries,:SE],
                   Transmission=AverageDayPower[newAvrageTime,:Transmission,:SE],
+                  Nuclear=AverageDayPower[newAvrageTime,:Nuclear,:SE]
 )
 
 long_df = stack(df, Not([:TowDays]), variable_name="Production", value_name="MW")
@@ -453,6 +453,7 @@ df = DataFrame(TowDays=newAvrageTime,
                   Hydro=AverageDayPower[newAvrageTime,:Hydro,:DK],
                   Batteries=AverageDayPower[newAvrageTime,:Batteries,:DK],
                   Transmission=AverageDayPower[newAvrageTime,:Transmission,:DK],
+                  Nuclear=AverageDayPower[newAvrageTime,:Nuclear,:DK]
 )
 
 long_df = stack(df, Not([:TowDays]), variable_name="Production", value_name="MW")
@@ -484,6 +485,7 @@ df = DataFrame(Hour=timeInterval,
                   Hydro=HourPower[timeInterval,:Hydro,:DE],
                   Batteries=HourPower[timeInterval,:Batteries,:DE],
                   Transmission=HourPower[timeInterval,:Transmission,:DE],
+                  Nuclear=HourPower[timeInterval,:Nuclear,:DE]
 )
 
 long_df = stack(df, Not([:Hour]), variable_name="Production", value_name="MW")
@@ -524,7 +526,8 @@ p5 = plot(
         bar(name="Hydro", x=region, y=Power[:,:Hydro]),
         bar(name="Batteries", x=region, y=Power[:,:Batteries]),
         bar(name="Transmission", x=region, y=Power[:,:Transmission]),
-        bar(name="TransmissionOutgoing", x=region, y=regionTransmissionOutgoing)
+        bar(name="TransmissionOutgoing", x=region, y=regionTransmissionOutgoing),
+        bar(name="Nuclear", x=region, y=Power[:,:Nuclear])
     ],
     Layout(
         title="Total energy production in diffrent regions and plants.",
@@ -546,7 +549,9 @@ p6 = plot(
         bar(name="Gas", x=region, y=value.(InstalledCapacity[:,:Gas])),
         bar(name="Hydro", x=region, y=value.(InstalledCapacity[:,:Hydro])),
         bar(name="Batteries", x=region, y=value.(InstalledCapacity[:,:Batteries])),
-        bar(name="Transmission", x=region, y=value.(InstalledCapacity[:,:Transmission]))
+        bar(name="Transmission", x=region, y=value.(InstalledCapacity[:,:Transmission])),
+        bar(name="Nuclear", x=region, y=value.(InstalledCapacity[:,:Nuclear]))
+
     ],
     Layout(
         title="Total capacity in diffrent regions and plants.",
@@ -583,7 +588,7 @@ df = DataFrame(Hour=HOUR,
                   Batteries=HourPower[HOUR,:Batteries,:DE],
                   Transmission=HourPower[HOUR,:Transmission,:DE]
 )
-CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDE_Exer3.csv", df)
+CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDE_Exer4.csv", df)
 
 df = DataFrame(Hour=HOUR,
                   Wind=HourPower[HOUR,:Wind,:SE],
@@ -593,7 +598,7 @@ df = DataFrame(Hour=HOUR,
                   Batteries=HourPower[HOUR,:Batteries,:SE],
                   Transmission=HourPower[HOUR,:Transmission,:SE]
 )
-CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptSE_Exer3.csv", df)
+CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptSE_Exer4.csv", df)
 
 df = DataFrame(Hour=HOUR,
                   Wind=HourPower[HOUR,:Wind,:DK],
@@ -603,4 +608,4 @@ df = DataFrame(Hour=HOUR,
                   Batteries=HourPower[HOUR,:Batteries,:DK],
                   Transmission=HourPower[HOUR,:Transmission,:DK]
 )
-CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDK_Exer3.csv", df)
+CSV.write("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDK_Exer4.csv", df)

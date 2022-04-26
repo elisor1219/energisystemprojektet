@@ -31,10 +31,8 @@ println("\nSetting variables...")
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
     0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #In MWh
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
-    #I am thinking of creating the batteries in the
-    #same way I created hydro.
     BatteryStorage[r in REGION, h in HOUR] >= 0                                #In MWh
-    OverflowProduction[r in REGION, h in HOUR] >= 0                 #In MW
+    BatteryInflow[r in REGION, h in HOUR] >= 0
 end
 
 #df_DE = CSV.read("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDE_Exer2b.csv", DataFrame)
@@ -65,7 +63,7 @@ println("\nSetting constraints...")
 
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h] for p in PLANT) >= load[r, h]
+        sum(Electricity[r, p, h] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
     EFFICIENCY_CONVERION[r in REGION, h in HOUR],
@@ -86,9 +84,6 @@ println("\nSetting constraints...")
     #The price of the fuel cost.
     FUEL_COST[r in REGION],
         FuelCost[r] >= cost[:Gas,3]*sum(EnergyFuel[r,h] for h in HOUR)
-
-    OVERFLOW_PRODUCTION[r in REGION, h in HOUR],
-        OverflowProduction[r, h] <= sum(Electricity[r, p, h] for p in PLANT)-load[r,h]
 
     #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 
@@ -133,9 +128,12 @@ println("\nSetting constraints...")
         #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + (Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
         #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + 1#(Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
 
+    BATTERY_IN_FLOW_CAP[r in REGION, h in HOUR],
+        BatteryInflow[r,h] <= InstalledCapacity[r, :Batteries]
+
     #The outflow of the batteries.
     OUT_IN_FLOW_STORAGE[r in REGION, h in 1:HOUR[end-1]],
-        BatteryStorage[r,h+1] == BatteryStorage[r,h] + OverflowProduction[r,h]*efficiency[:Batteries] - Electricity[r, :Batteries, h]
+        BatteryStorage[r,h+1] == BatteryStorage[r,h] + BatteryInflow[r,h]*efficiency[:Batteries] - Electricity[r, :Batteries, h]
 
     #The max power the batteries can produce becuse of the electricity in the storage.
     BATTERY_POWER[r in REGION, h in HOUR],
