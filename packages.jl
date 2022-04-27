@@ -1,0 +1,1 @@
+import Pkg; Pkg.add("JuMP");import Pkg; Pkg.add("AxisArrays");import Pkg; Pkg.add("Gurobi");import Pkg; Pkg.add("UnPack");import Pkg; Pkg.add("CSV");import Pkg; Pkg.add("DataFrames");import Pkg; Pkg.add("PlotlyJS");import Pkg; Pkg.add("Format");

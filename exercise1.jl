@@ -9,7 +9,7 @@ include("input_energisystemprojekt.jl")
         PV_cf, wind_cf = read_input()
 
 m = Model(Gurobi.Optimizer)
-#set_optimizer_attribute(m, "NumericFocus", 3)
+#set_optimizer_attribute(m, "NumericFocus", 1)
 #set_optimizer_attribute(m, "BarHomogeneous", 1)
 
 function annualisedCost(investmentCost, years)
