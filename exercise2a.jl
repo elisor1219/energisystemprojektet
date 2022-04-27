@@ -59,7 +59,7 @@ println("\nSetting constraints...")
         Emission[r, p] >= emissionFactor[p] * sum(EnergyFuel[r, p, h] for h in HOUR)
 
     #The cap on how much CO_2 we can produce.
-    MAX_EMISSION,
+    MAX_EMISSION_CAP,
         sum(sum(Emission[r,p] for p in PLANT) for r in REGION) <= MAX_EMISSION
 
     #The annualisedInvestment cost for all plants.
