@@ -14,7 +14,6 @@ m = Model(Gurobi.Optimizer)
 set_optimizer_attribute(m, "NumericFocus", 1)
 set_optimizer_attribute(m, "BarHomogeneous", 1)
 #set_optimizer_attribute(m, "Crossover", 0)
-#set_optimizer_attribute(m, "Method", 2)
 
 function annualisedCost(investmentCost, years)
     investmentCost * ((discountrate)/(1-(1/((1+discountrate)^years))))
