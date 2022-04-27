@@ -21,6 +21,8 @@ end
 
 #Constans that will be used in the model
 RESERVOIR_MAX_SIZE = 33*1000000                                     #[MWh]
+MAX_EMISSION = (142259929.135)*0.1                                      #Ton CO_2
+
 
 println("\nSetting variables...")
 @variables m begin
@@ -65,11 +67,15 @@ println("\nSetting constraints...")
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
     EFFICIENCY_CONVERION[r in REGION, p in plantsWithFuel, h in HOUR],
-        EnergyFuel[r,p,h] >= Electricity[r,p,h] / efficiency[p]
+        EnergyFuel[r,p,h] == Electricity[r,p,h] / efficiency[p]
 
     #The amount of CO_2 we are producing. (>= is more stable then ==)
     EMISSION[r in REGION],
-        Emission[r] >= emissionFactor[:Gas] * sum(EnergyFuel[r,:Gas,h] for h in HOUR)
+        Emission[r] == emissionFactor[:Gas] * sum(EnergyFuel[r,:Gas,h] for h in HOUR)
+
+    #The cap on how much CO_2 we can produce.
+    MAX_EMISSION_CAP,
+        sum(Emission) <= MAX_EMISSION
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
@@ -531,7 +537,7 @@ p5 = plot(
     ],
     Layout(
         title="Total energy production in diffrent regions and plants.",
-        yaxis_title="MW",
+        yaxis_title="MWh",
         font=attr(
             size=15,
         )

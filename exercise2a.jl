@@ -21,6 +21,7 @@ RESERVOIR_MAX_SIZE = 33*1000000                             #[MWh]
 MAX_EMISSION = (1.4419721323355423e11 /1000)* 0.4724          #Ton CO_2
 #MAX_EMISSION is form exercise1 and will firsly be converted to Ton CO_2 (from kg CO_2).
 #Then mult. by 0.1 to reduce the CO_2 emission by 90%.
+#Just relized that this CO_2 is the wrong one, it should be 1.4225992913456662e11...
 
 println("\nSetting variables...")
 @variables m begin

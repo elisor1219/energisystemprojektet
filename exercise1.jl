@@ -54,7 +54,7 @@ println("\nSetting constraints...")
 
     #The amount of CO_2 we are producing. (>= is more stable then ==)
     EMISSION[r in REGION, p in PLANT],
-        Emission[r, p] >= emissionFactor[p] * sum(EnergyFuel[r, p, h] for h in HOUR)
+        Emission[r, p] == emissionFactor[p] * sum(EnergyFuel[r, p, h] for h in HOUR)
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],

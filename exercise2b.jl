@@ -9,8 +9,8 @@ include("input_energisystemprojekt_exercise2b.jl")
         PV_cf, wind_cf = read_input()
 
 m = Model(Gurobi.Optimizer)
-set_optimizer_attribute(m, "NumericFocus", 1)
-set_optimizer_attribute(m, "BarHomogeneous", 1)
+#set_optimizer_attribute(m, "NumericFocus", 1)
+#set_optimizer_attribute(m, "BarHomogeneous", 1)
 
 function annualisedCost(investmentCost, years)
     investmentCost * ((discountrate)/(1-(1/((1+discountrate)^years))))
@@ -18,6 +18,8 @@ end
 
 #Constans that will be used in the model
 RESERVOIR_MAX_SIZE = 33*1000000                                     #[MWh]
+MAX_EMISSION = (142259929.135)*0.1                                      #Ton CO_2
+
 
 println("\nSetting variables...")
 @variables m begin
@@ -71,7 +73,11 @@ println("\nSetting constraints...")
 
     #The amount of CO_2 we are producing. (>= is more stable then ==)
     EMISSION[r in REGION],
-        Emission[r] >= emissionFactor[:Gas] * sum(EnergyFuel[r, h] for h in HOUR)
+        Emission[r] == emissionFactor[:Gas] * sum(EnergyFuel[r, h] for h in HOUR)
+
+    #The cap on how much CO_2 we can produce.
+    MAX_EMISSION_CAP,
+        sum(Emission) <= MAX_EMISSION
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
@@ -133,11 +139,11 @@ println("\nSetting constraints...")
 
     #The outflow of the batteries.
     OUT_IN_FLOW_STORAGE[r in REGION, h in 1:HOUR[end-1]],
-        BatteryStorage[r,h+1] == BatteryStorage[r,h] + BatteryInflow[r,h]*efficiency[:Batteries] - Electricity[r, :Batteries, h]
+        BatteryStorage[r,h+1] == BatteryStorage[r,h] + BatteryInflow[r,h] - Electricity[r, :Batteries, h]
 
     #The max power the batteries can produce becuse of the electricity in the storage.
     BATTERY_POWER[r in REGION, h in HOUR],
-        Electricity[r, :Batteries, h] <= BatteryStorage[r,h]
+        Electricity[r, :Batteries, h]*efficiency[:Batteries] <= BatteryStorage[r,h]
 
     #Sets the BatteryStorage to an initial value.
     BATTERY_STORAGE_INTIAL_SIZE[r in REGION],
