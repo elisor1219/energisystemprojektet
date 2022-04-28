@@ -1,9 +1,9 @@
 #Run exercise2b.jl before this file
-#exercise1 had 1.4225992913456662e11 kg CO_2 and 1.422599291345666e8 ton CO_2
-#              142 259 929 135 kg                142 259 929 ton
-#              142,260 miljarde kg (swedish)
+#exercise1 had 1.387744849926479e11 kg CO_2 and 1.387744849926479e8 ton CO_2
+#              138 774 484 993 kg                138 774 485 ton
+#              138,774 miljarde kg (swedish)
 #10% of that is = 
-# =14 225 992 914 kg <=> 14,226 miljarde kg <=> 14 225 993 ton <=> 14,226 miljoner ton
+# =13 877 448 499.3 kg <=> 13,877 miljarde kg <=> 13 877 448 ton <=> 13,877 miljoner ton
 
 value.(sum(Emission))           #Kg CO_2
 value.(sum(Emission))/1000      #Ton CO_2
