@@ -4,6 +4,11 @@ pathToFigures = "figures/exercise1"
 
 println("\nBuilding model...")
 include("input_energisystemprojekt.jl")
+include("constraints\\baseConstraints.jl")
+include("constraints\\windConstraints.jl")
+include("constraints\\solarConstraints.jl")
+include("constraints\\hydroConstraints.jl")
+include("helpFunctions.jl")
 @unpack REGION, PLANT, HOUR, numregions, load, maxcap , cost,
         discountrate, lifetime, efficiency, emissionFactor, inflow,
         PV_cf, wind_cf = read_input()
@@ -11,7 +16,6 @@ include("input_energisystemprojekt.jl")
 m = Model(Gurobi.Optimizer)
 #set_optimizer_attribute(m, "NumericFocus", 1)
 #set_optimizer_attribute(m, "BarHomogeneous", 1)
-
 
 function annualisedCost(investmentCost, years)
     investmentCost * ((discountrate)/(1-(1/((1+discountrate)^years))))
@@ -26,7 +30,7 @@ println("\nSetting variables...")
     #written in SCREAMING_SNAKE_CASE
     Electricity[r in REGION, p in PLANT, h in HOUR] >= 0            #In MW
     EnergyFuel[r in REGION, p in PLANT, h in HOUR] >= 0             #In MW
-    Emission[r in REGION, p in PLANT] >= 0                          #In ton CO_2
+    Emission[r in REGION] >= 0                          #In ton CO_2
     RunnigCost[r in REGION, p in PLANT] >= 0                        #In euro
     FuelCost[r in REGION, p in PLANT] >= 0                          #In euro
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
@@ -40,71 +44,19 @@ end
 #2) Emission is only created from Gas
 
 println("\nSetting constraints...")
-@constraints m begin
-    GENARTION_CAPACITY[r in REGION, p in PLANT, h in HOUR],
-        Electricity[r, p, h] <= InstalledCapacity[r, p]
 
+readBaseConstraints(m)
+
+readWindConstraints(m)
+
+readSolarConstraints(m)
+
+readHydroConstraints(m)
+
+@constraints m begin
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h] for p in PLANT) >= load[r, h]
-
-    #The efficiency of diffrent plants. (>= is more stable then ==)
-    EFFICIENCY_CONVERION[r in REGION, p in PLANT, h in HOUR],
-        EnergyFuel[r,p,h] == Electricity[r,p,h] / efficiency[p]
-
-    #The amount of CO_2 we are producing. (>= is more stable then ==)
-    EMISSION[r in REGION, p in PLANT],
-        Emission[r, p] == emissionFactor[p] * sum(EnergyFuel[r, p, h] for h in HOUR)
-
-    #The annualisedInvestment cost for all plants.
-    ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
-        AnnualisedInvestment[r,p] >=  annualisedCost(cost[p,1]*InstalledCapacity[r,p], lifetime[p])
-
-    #The cost of the system per region.
-    RUNNING_COST[r in REGION, p in PLANT],
-        RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
-
-    #The price of the fuel cost.
-    FUEL_COST[r in REGION, p in PLANT],
-        FuelCost[r,p] >= cost[p,3]*sum(EnergyFuel[r,p,h] for h in HOUR)
-
-    #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-
-
-    #---Wind---
-    #Wind can only produce when it is windy.
-    WIND_OUTPUT[r in REGION, h in HOUR],
-        Electricity[r, :Wind, h] <= InstalledCapacity[r, :Wind] * wind_cf[r,h]
-
-    #---Solar (PV)---
-    #Solar can only produce durying the day.
-    SOLAR_OUTPUT[r in REGION, h in HOUR],
-        Electricity[r, :PV, h] <= InstalledCapacity[r, :PV] * PV_cf[r,h]
-
-    #---Hydro---
-    #The inflow of "water" (power) in the hyrdo reservoir.
-    #INFLOW_RESERVOIR[h in 2:HOUR[end]],
-    #    HydroReservoirStorage[h] <= HydroReservoirStorage[h-1] + inflow[h]
-
-    #The outflow of "water" (power) in the hydro reservoir.
-    #OUTFLOW_RESERVOIR[h in 2:HOUR[end]],
-    #    HydroReservoirStorage[h] >= HydroReservoirStorage[h-1] - Electricity[:SE, :Hydro, h-1]
-
-    OUT_IN_FLOW_RESERVOIR[h in 1:HOUR[end-1]],
-        HydroReservoirStorage[h+1] == HydroReservoirStorage[h] + inflow[h] - Electricity[:SE, :Hydro, h]
-
-    #Sets the first day equal to the last day.
-    EQUAL_RESERVOIR,
-        HydroReservoirStorage[HOUR[1]] == HydroReservoirStorage[HOUR[end]]
-
-    #The max power the hydro can produce becuse of the water in the reservoir.
-    HYDRO_POWER[h in HOUR],
-        Electricity[:SE, :Hydro, h] <= HydroReservoirStorage[h]
-
-    #Sets the HydroReservoirStorage to an initial value.
-    #HYDRO_INTIAL_SIZE,
-    #    HydroReservoirStorage[1] == inflow[1]
-
+        sum(Electricity[r, p, h] for p in PLANT) >= load[r, h] 
 end
 
 println("\nSetting objective function...")
@@ -153,9 +105,9 @@ formatedValuesCost[:SE] = format(regionCost[:SE], precision=0, commas=true )
 formatedValuesCost[:DK] = format(regionCost[:DK], precision=0, commas=true )
 
 formatedValuesCO_2 = AxisArray(Vector{Union{Nothing, String}}(nothing, length(REGION)), REGION)
-formatedValuesCO_2[:DE] = format(value(Emission[:DE, :Gas]), precision=0, commas=true )
-formatedValuesCO_2[:SE] = format(value(Emission[:SE, :Gas]), precision=0, commas=true )
-formatedValuesCO_2[:DK] = format(value(Emission[:DK, :Gas]), precision=0, commas=true )
+formatedValuesCO_2[:DE] = format(value(Emission[:DE]), precision=0, commas=true )
+formatedValuesCO_2[:SE] = format(value(Emission[:SE]), precision=0, commas=true )
+formatedValuesCO_2[:DK] = format(value(Emission[:DK]), precision=0, commas=true )
 
 #Printing the values
 println("Total cost: ", format(systemCost, precision=0, commas=true ), " €")
@@ -393,9 +345,4 @@ display(p4)
 display(p5)
 display(p6)
 
-savefig(p1, string(pathToFigures,"/germany.svg"))
-savefig(p2, string(pathToFigures,"/sweden.svg"))
-savefig(p3, string(pathToFigures,"/denmark.svg"))
-savefig(p4, string(pathToFigures,"/germany147-651.svg"))
-savefig(p5, string(pathToFigures,"/plants.svg"))
-savefig(p6, string(pathToFigures,"/capacity.svg"))
+saveFigures(pathToFigures)

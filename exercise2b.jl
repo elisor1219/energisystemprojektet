@@ -4,6 +4,12 @@ pathToFigures = "figures/exercise2"
 
 println("\nBuilding model...")
 include("input_energisystemprojekt_exercise2b.jl")
+include("constraints\\baseConstraints.jl")
+include("constraints\\windConstraints.jl")
+include("constraints\\solarConstraints.jl")
+include("constraints\\hydroConstraints.jl")
+include("constraints\\batteriesConstraints.jl")
+include("helpFunctions.jl")
 @unpack REGION, PLANT, HOUR, numregions, load, maxcap , cost,
         discountrate, lifetime, efficiency, emissionFactor, inflow,
         PV_cf, wind_cf = read_input()
@@ -26,10 +32,10 @@ println("\nSetting variables...")
     #Variables is written in UpperCamelCase and names of constraits are
     #written in SCREAMING_SNAKE_CASE
     Electricity[r in REGION, p in PLANT, h in HOUR] >= 0            #In MW
-    EnergyFuel[r in REGION, h in HOUR] >= 0             #In MW
+    EnergyFuel[r in REGION, p in PLANT, h in HOUR] >= 0             #In MW
     Emission[r in REGION] >= 0                          #In ton CO_2
     RunnigCost[r in REGION, p in PLANT] >= 0                        #In euro
-    FuelCost[r in REGION] >= 0                          #In euro
+    FuelCost[r in REGION, p in PLANT] >= 0                          #In euro
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
     0 <= HydroReservoirStorage[h in HOUR] <= RESERVOIR_MAX_SIZE     #In MWh
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
@@ -58,96 +64,25 @@ end
 
 #TODO: When adding nucler, remeber to add p in [:GAS, :Nucler] an so on.
 
+readBaseConstraints(m)
+
+readWindConstraints(m)
+
+readSolarConstraints(m)
+
+readHydroConstraints(m)
+
+readBatteriesConstraints(m)
+
 println("\nSetting constraints...")
 @constraints m begin
-    GENARTION_CAPACITY[r in REGION, p in PLANT, h in HOUR],
-        Electricity[r, p, h] <= InstalledCapacity[r, p]
-
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
         sum(Electricity[r, p, h] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
 
-    #The efficiency of diffrent plants. (>= is more stable then ==)
-    EFFICIENCY_CONVERION[r in REGION, h in HOUR],
-        EnergyFuel[r,h] == Electricity[r,:Gas,h] / efficiency[:Gas]
-
-    #The amount of CO_2 we are producing. (>= is more stable then ==)
-    EMISSION[r in REGION],
-        Emission[r] == emissionFactor[:Gas] * sum(EnergyFuel[r, h] for h in HOUR)
-
     #The cap on how much CO_2 we can produce.
     MAX_EMISSION_CAP,
         sum(Emission) <= MAX_EMISSION
-
-    #The annualisedInvestment cost for all plants.
-    ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
-        AnnualisedInvestment[r,p] >=  annualisedCost(cost[p,1]*InstalledCapacity[r,p], lifetime[p])
-
-    #The cost of the system per region.
-    RUNNING_COST[r in REGION, p in PLANT],
-        RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
-
-    #The price of the fuel cost.
-    FUEL_COST[r in REGION],
-        FuelCost[r] >= cost[:Gas,3]*sum(EnergyFuel[r,h] for h in HOUR)
-
-    #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
-
-
-    #---Wind---
-    #Wind can only produce when it is windy.
-    WIND_OUTPUT[r in REGION, h in HOUR],
-        Electricity[r, :Wind, h] <= InstalledCapacity[r, :Wind] * wind_cf[r,h]
-
-    #---Solar (PV)---
-    #Solar can only produce durying the day.
-    SOLAR_OUTPUT[r in REGION, h in HOUR],
-        Electricity[r, :PV, h] <= InstalledCapacity[r, :PV] * PV_cf[r,h]
-
-    #---Hydro---
-    #The inflow of "water" (power) in the hyrdo reservoir.
-    #INFLOW_RESERVOIR[h in 2:HOUR[end]],
-    #    HydroReservoirStorage[h] <= HydroReservoirStorage[h-1] + inflow[h]
-
-    #The outflow of "water" (power) in the hydro reservoir.
-    #OUTFLOW_RESERVOIR[h in 2:HOUR[end]],
-    #    HydroReservoirStorage[h] >= HydroReservoirStorage[h-1] - Electricity[:SE, :Hydro, h-1]
-
-    OUT_IN_FLOW_RESERVOIR[h in 2:HOUR[end-1]],
-        HydroReservoirStorage[h+1] == HydroReservoirStorage[h] + inflow[h] - Electricity[:SE, :Hydro, h]
-
-    #Sets the first day equal to the last day.
-    EQUAL_RESERVOIR,
-        HydroReservoirStorage[HOUR[1]] == HydroReservoirStorage[HOUR[end]]
-
-    #The max power the hydro can produce becuse of the water in the reservoir.
-    HYDRO_POWER[h in HOUR],
-        Electricity[:SE, :Hydro, h] <= HydroReservoirStorage[h]
-
-    #Sets the HydroReservoirStorage to an initial value.
-    HYDRO_INTIAL_SIZE,
-        HydroReservoirStorage[1] == inflow[1]
-
-    #---Batteries---
-    #The inflow in the batteries. Taking away 10% to account fot the round trip efficiency.
-    #INFLOW_STORAGE[r in REGION, p in PLANT, h in 2:HOUR[end]],
-        #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + (Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
-        #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + 1#(Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
-
-    BATTERY_IN_FLOW_CAP[r in REGION, h in HOUR],
-        BatteryInflow[r,h] <= InstalledCapacity[r, :Batteries]
-
-    #The outflow of the batteries.
-    OUT_IN_FLOW_STORAGE[r in REGION, h in 1:HOUR[end-1]],
-        BatteryStorage[r,h+1] == BatteryStorage[r,h] + BatteryInflow[r,h] - Electricity[r, :Batteries, h]
-
-    #The max power the batteries can produce becuse of the electricity in the storage.
-    BATTERY_POWER[r in REGION, h in HOUR],
-        Electricity[r, :Batteries, h]*efficiency[:Batteries] <= BatteryStorage[r,h]
-
-    #Sets the BatteryStorage to an initial value.
-    BATTERY_STORAGE_INTIAL_SIZE[r in REGION],
-        BatteryStorage[r,1] == 0
 
 end
 
@@ -178,7 +113,7 @@ regionCost = AxisArray(zeros(length(REGION)), REGION)
 for r in REGION
     regionCost[r] = value(sum(RunnigCost[r,p] for p in PLANT)) +
     value(sum(AnnualisedInvestment[r,p] for p in PLANT)) +
-    value(FuelCost[r])
+    value(sum(FuelCost[r,p] for p in PLANT))
 end
 
 systemCost = objective_value(m) # €
@@ -443,12 +378,7 @@ display(p4)
 display(p5)
 display(p6)
 
-savefig(p1, string(pathToFigures,"/germany.svg"))
-savefig(p2, string(pathToFigures,"/sweden.svg"))
-savefig(p3, string(pathToFigures,"/denmark.svg"))
-savefig(p4, string(pathToFigures,"/germany147-651.svg"))
-savefig(p5, string(pathToFigures,"/plants.svg"))
-savefig(p6, string(pathToFigures,"/capacity.svg"))
+saveFigures(pathToFigures)
 
 
 
