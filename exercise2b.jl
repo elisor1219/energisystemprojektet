@@ -65,15 +65,15 @@ println("\nSetting constraints...")
 
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
+        sum(Electricity[r, p, h]*efficiency[p] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
-    EFFICIENCY_CONVERION[r in REGION, h in HOUR],
-        EnergyFuel[r,h] == Electricity[r,:Gas,h] / efficiency[:Gas]
+    #EFFICIENCY_CONVERION[r in REGION, h in HOUR],
+    #    EnergyFuel[r,h] == Electricity[r,:Gas,h] / efficiency[:Gas]
 
     #The amount of CO_2 we are producing. (>= is more stable then ==)
     EMISSION[r in REGION],
-        Emission[r] == emissionFactor[:Gas] * sum(EnergyFuel[r, h] for h in HOUR)
+        Emission[r] == emissionFactor[:Gas] * sum(Electricity[r,:Gas, h] for h in HOUR)
 
     #The cap on how much CO_2 we can produce.
     MAX_EMISSION_CAP,
@@ -85,11 +85,11 @@ println("\nSetting constraints...")
 
     #The cost of the system per region.
     RUNNING_COST[r in REGION, p in PLANT],
-        RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
+        RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h]*efficiency[p] for h in HOUR)
 
     #The price of the fuel cost.
     FUEL_COST[r in REGION],
-        FuelCost[r] >= cost[:Gas,3]*sum(EnergyFuel[r,h] for h in HOUR)
+        FuelCost[r] >= cost[:Gas,3]*sum(Electricity[r,:Gas,h] for h in HOUR)
 
     #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 
@@ -218,14 +218,14 @@ println("\tDenmark: ", formatedValuesCO_2[:DK], " CO_2")
 #Calculating the total power generated from diffrent PLANTS in diffrent REGIONS
 Power = AxisArray(zeros(length(REGION), length(PLANT)), REGION, PLANT)
 for r in REGION, p in PLANT
-    Power[r, p] = value.(sum(Electricity[r, p, :]))
+    Power[r, p] = value.(sum(Electricity[r, p, :]))*efficiency[p]
 end
 
 #Calculating the power generated from diffrent plants in diffrent REGIONS.
 #This will make it easier to plot later.
 HourPower = AxisArray(zeros(length(HOUR), length(PLANT), length(REGION)), HOUR, PLANT, REGION)
 for h in HOUR, p in PLANT, r in REGION
-    HourPower[h,p,r] = value.(Electricity[r,p,h])
+    HourPower[h,p,r] = value.(Electricity[r,p,h])*efficiency[p]
 end
 
 

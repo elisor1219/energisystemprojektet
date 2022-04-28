@@ -25,7 +25,7 @@ println("\nSetting variables...")
     #Variables is written in UpperCamelCase and names of constraits are
     #written in SCREAMING_SNAKE_CASE
     Electricity[r in REGION, p in PLANT, h in HOUR] >= 0            #In MW
-    EnergyFuel[r in REGION, p in PLANT, h in HOUR] >= 0             #In MW
+    #EnergyFuel[r in REGION, p in PLANT, h in HOUR] >= 0             #In MW
     Emission[r in REGION, p in PLANT] >= 0                          #In ton CO_2
     RunnigCost[r in REGION, p in PLANT] >= 0                        #In euro
     FuelCost[r in REGION, p in PLANT] >= 0                          #In euro
@@ -46,15 +46,16 @@ println("\nSetting constraints...")
 
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h] for p in PLANT) >= load[r, h]
+        sum(Electricity[r, p, h]*efficiency[p] for p in PLANT) >= load[r, h]
+        #Have changed so Electricity[r,:Gas,h] is now the MWh_fuel insted of MWh_elec
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
-    EFFICIENCY_CONVERION[r in REGION, p in PLANT, h in HOUR],
-        EnergyFuel[r,p,h] == Electricity[r,p,h] / efficiency[p]
+    #EFFICIENCY_CONVERION[r in REGION, p in PLANT, h in HOUR],
+    #    EnergyFuel[r,p,h] == Electricity[r,p,h] / efficiency[p]
 
     #The amount of CO_2 we are producing. (>= is more stable then ==)
     EMISSION[r in REGION, p in PLANT],
-        Emission[r, p] == emissionFactor[p] * sum(EnergyFuel[r, p, h] for h in HOUR)
+        Emission[r, p] == emissionFactor[p] * sum(Electricity[r,p,h] for h in HOUR)
 
     #The annualisedInvestment cost for all plants.
     ANNUALISED_INVESTMENT[r in REGION, p in PLANT],
@@ -62,11 +63,11 @@ println("\nSetting constraints...")
 
     #The cost of the system per region.
     RUNNING_COST[r in REGION, p in PLANT],
-        RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h] for h in HOUR)
+        RunnigCost[r,p] >= cost[p,2]*sum(Electricity[r,p,h]*efficiency[p] for h in HOUR)
 
     #The price of the fuel cost.
     FUEL_COST[r in REGION, p in PLANT],
-        FuelCost[r,p] >= cost[p,3]*sum(EnergyFuel[r,p,h] for h in HOUR)
+        FuelCost[r,p] >= cost[p,3]*sum(Electricity[r,p,h] for h in HOUR)
 
     #Specific constraints v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
 
@@ -79,7 +80,7 @@ println("\nSetting constraints...")
     #---Solar (PV)---
     #Solar can only produce durying the day.
     SOLAR_OUTPUT[r in REGION, h in HOUR],
-        Electricity[r, :PV, h] <= InstalledCapacity[r, :PV] * PV_cf[r,h]
+        Electricity[r, :PV, h] <= InstalledCapacity[r, :PV]  * PV_cf[r,h]
 
     #---Hydro---
     #The inflow of "water" (power) in the hyrdo reservoir.
@@ -174,14 +175,14 @@ println("\tDenmark: ", formatedValuesCO_2[:DK], " CO_2")
 #Calculating the total power generated from diffrent PLANTS in diffrent REGIONS
 Power = AxisArray(zeros(length(REGION), length(PLANT)), REGION, PLANT)
 for r in REGION, p in PLANT
-    Power[r, p] = value.(sum(Electricity[r, p, :]))
+    Power[r, p] = value.(sum(Electricity[r, p, :]))*efficiency[p]
 end
 
 #Calculating the power generated from diffrent plants in diffrent REGIONS.
 #This will make it easier to plot later.
 HourPower = AxisArray(zeros(length(HOUR), length(PLANT), length(REGION)), HOUR, PLANT, REGION)
 for h in HOUR, p in PLANT, r in REGION
-    HourPower[h,p,r] = value.(Electricity[r,p,h])
+    HourPower[h,p,r] = value.(Electricity[r,p,h])*efficiency[p]
 end
 
 
