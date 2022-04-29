@@ -24,7 +24,7 @@ end
 
 #Constans that will be used in the model
 RESERVOIR_MAX_SIZE = 33*1000000                                     #[MWh]
-MAX_EMISSION = (142259929.135)*0.1                                     #Ton CO_2
+MAX_EMISSION = getMaxEmission(0.1)                                  #Ton CO_2
 
 
 println("\nSetting variables...")

@@ -29,7 +29,7 @@ for r in REGION
 end
 
 #almostInf = typemax(Int)/1000
-almostInf = 1000
+almostInf = 10000
 maxcaptable = [                                                             # GW
         # PLANT         DE             SE              DK
         :Wind           180            280             90

@@ -1,7 +1,7 @@
 function readBaseConstraints(m)
     @constraints m begin
     GENARTION_CAPACITY[r in REGION, p in PLANT, h in HOUR],
-        Electricity[r, p, h] <= InstalledCapacity[r, p]
+        Electricity[r,p,h] <= InstalledCapacity[r, p]
 
     #The efficiency of diffrent plants. (>= is more stable then ==)
     EFFICIENCY_CONVERION[r in REGION, p in PLANT, h in HOUR],
