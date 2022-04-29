@@ -24,7 +24,7 @@ end
 
 #Constans that will be used in the model
 RESERVOIR_MAX_SIZE = 33*1000000                                     #[MWh]
-MAX_EMISSION = (142259929.135)*0.1                                      #Ton CO_2
+MAX_EMISSION = (142259929.135)*0.1                                     #Ton CO_2
 
 
 println("\nSetting variables...")
@@ -88,9 +88,6 @@ end
 
 println("\nSetting objective function...")
 @objective m Min begin
-    #sum(sum(RunnigCost[r,p] for p in PLANT) for r in REGION) +
-    #sum(sum(AnnualisedInvestment[r,p] for p in PLANT) for r in REGION) +
-    #sum(sum(FuelCost[r,p] for p in PLANT) for r in REGION)
     sum(RunnigCost) + sum(AnnualisedInvestment) + sum(FuelCost)
 end
 

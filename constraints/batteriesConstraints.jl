@@ -6,8 +6,11 @@ function readBatteriesConstraints(m)
             #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + (Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
             #BatteryStorage[r,h] <= BatteryStorage[r,h-1] + 1#(Electricity[r,p,h-1]-load[r,h])*efficiency[:Batteries]
 
-        BATTERY_IN_FLOW_CAP[r in REGION, h in HOUR],
-            BatteryInflow[r,h] <= InstalledCapacity[r, :Batteries]
+        #BATTERY_IN_FLOW_CAP[r in REGION, h in HOUR],
+        #    BatteryInflow[r,h] <= BatteryStorage[r,h]
+
+        BATTERY_STORAGE_CAP[r in REGION, h in HOUR],
+            BatteryStorage[r,h] <= InstalledCapacity[r, :Batteries]
 
         #The outflow of the batteries.
         OUT_IN_FLOW_STORAGE[r in REGION, h in 1:HOUR[end-1]],
