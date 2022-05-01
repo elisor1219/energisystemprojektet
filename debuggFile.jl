@@ -104,3 +104,6 @@ value.(TransmissionOutflow[:SE,timeRange])
 value.(Electricity[:DE,:Batteries,timeRange])
 value.(BatteryInflow[:DE,timeRange])
 value.(BatteryStorage[:DE,timeRange])
+
+value.(sum(Electricity[:DE,:,:])) - value.(sum(load[:DE,:]))
+value.(InstalledCapacity[:DE,:Batteries])
