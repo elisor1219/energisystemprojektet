@@ -93,3 +93,14 @@ annualisedCost(cost[plant,1]*value.(InstalledCapacity[region,plant]),lifetime[pl
 #Method 4
 annualisedCost(cost[plant,1],lifetime[plant])*value.(InstalledCapacity[region,plant])
 #Method 1 and 2 are the same and 3 and 4 are also the same.
+
+
+timeRange = 147:157
+value.(TransmissionOutflow[:DK,timeRange])
+value.(Electricity[:DE,:Transmission,timeRange])
+value.(TransmissionFromTo[:SE,[:DE,:DK],timeRange])
+value.(TransmissionOutflow[:SE,timeRange])
+
+value.(Electricity[:DE,:Batteries,timeRange])
+value.(BatteryInflow[:DE,timeRange])
+value.(BatteryStorage[:DE,timeRange])

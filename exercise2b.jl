@@ -33,7 +33,7 @@ println("\nSetting variables...")
     #written in SCREAMING_SNAKE_CASE
     Electricity[r in REGION, p in PLANT, h in HOUR] >= 0            #In MW
     EnergyFuel[r in REGION, p in PLANT, h in HOUR] >= 0             #In MW
-    Emission[r in REGION] >= 0                          #In ton CO_2
+    Emission[r in REGION] >= 0                                      #In ton CO_2
     RunnigCost[r in REGION, p in PLANT] >= 0                        #In euro
     FuelCost[r in REGION, p in PLANT] >= 0                          #In euro
     AnnualisedInvestment[r in REGION, p in PLANT] >= 0              #In euro
@@ -78,7 +78,7 @@ println("\nSetting constraints...")
 @constraints m begin
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
+        sum(Electricity[r, p, h]*efficiency[p] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
 
     #The cap on how much CO_2 we can produce.
     MAX_EMISSION_CAP,

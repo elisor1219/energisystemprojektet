@@ -9,5 +9,5 @@ end
 
 function getMaxEmission(percentage)
     #This will return the max emission the model is able to produce, in ton CO_2
-    return 138774484.993*percentage
+    return 138608551.174*percentage
 end
