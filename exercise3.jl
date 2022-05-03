@@ -42,6 +42,7 @@ println("\nSetting variables...")
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
     BatteryStorage[r in REGION, h in HOUR] >= 0                     #In MWh
     BatteryInflow[r in REGION, h in HOUR] >= 0
+    BatteryOutflow[r in REGION, h in HOUR] >= 0
     TransmissionFromTo[r1 in REGION, r2 in REGION, h in HOUR] >= 0         #In MW
     TransmissionOutflow[r in REGION, h in HOUR] >= 0
 end
@@ -75,7 +76,7 @@ println("\nSetting constraints...")
     #The minimum amount of energy needed.
     #(landets produktion) + (landets_import) - (landets_export) + (hur_mycket_vi_plockar_ut_ur_batterier) - (hur_mycket_vi_laddar_in_i_batterier) >= efterfrågan
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h]*efficiency[p] for p in PLANT) - BatteryInflow[r,h] - TransmissionOutflow[r,h] >= load[r, h]
+        sum(Electricity[r, p, h] for p in PLANT) - BatteryInflow[r,h] - TransmissionOutflow[r,h] >= load[r, h]
 
     #The cap on how much CO_2 we can produce.
     MAX_EMISSION_CAP,

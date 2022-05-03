@@ -56,14 +56,11 @@ readHydroConstraints(m)
 @constraints m begin
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h]*efficiency[p] for p in PLANT) >= load[r, h] 
+        sum(Electricity[r, p, h] for p in PLANT) >= load[r, h] 
 end
 
 println("\nSetting objective function...")
 @objective m Min begin
-    #sum(sum(RunnigCost[r,p] for p in PLANT) for r in REGION) +
-    #sum(sum(AnnualisedInvestment[r,p] for p in PLANT) for r in REGION) +
-    #sum(sum(FuelCost[r,p] for p in PLANT) for r in REGION)
     sum(RunnigCost) + sum(AnnualisedInvestment) + sum(FuelCost)
 end
 

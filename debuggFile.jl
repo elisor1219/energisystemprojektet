@@ -79,7 +79,24 @@ Average capacity Wind:
         Denmark: 5,502 MW
 =#
 
-plot(HourPower[:,:,:SE])
+timeThing = HOUR
+regionThining = :DE
+
+plot(HourPower[timeThing, :Batteries, regionThining])
+plot(value.(BatteryStorage[regionThining, timeThing]))
+plot(value.(BatteryInflow[regionThining, timeThing]))
+plot(value.(BatteryOutflow[regionThining, timeThing]))
+
+plotHelper = AxisArray(zeros(length(timeThing),4), timeThing,[Electricity,BatteryStorage,BatteryInflow,BatteryOutflow])
+
+plotHelper[:,1] = HourPower[timeThing, :Batteries, regionThining]
+plotHelper[:,2] = value.(BatteryStorage[regionThining, timeThing])
+plotHelper[:,3] = value.(BatteryInflow[regionThining, timeThing])
+plotHelper[:,4] = value.(BatteryOutflow[regionThining, timeThing])
+
+plot(plotHelper)
+
+
 
 plant = :PV
 region = :DE
@@ -104,6 +121,15 @@ value.(TransmissionOutflow[:SE,timeRange])
 value.(Electricity[:DE,:Batteries,timeRange])
 value.(BatteryInflow[:DE,timeRange])
 value.(BatteryStorage[:DE,timeRange])
+value.(BatteryOutflow[:DE,timeRange])
 
 value.(sum(Electricity[:DE,:,:])) - value.(sum(load[:DE,:]))
 value.(InstalledCapacity[:DE,:Batteries])
+
+
+day = 147
+value.(sum(Electricity[:DE,:,day]))
+value.(Electricity[:DE,:,day])
+load[:DE,day]
+
+

@@ -41,6 +41,7 @@ println("\nSetting variables...")
     0 <= InstalledCapacity[r in REGION, p in PLANT] <= maxcap[r, p] #In MW
     BatteryStorage[r in REGION, h in HOUR] >= 0                                #In MWh
     BatteryInflow[r in REGION, h in HOUR] >= 0
+    BatteryOutflow[r in REGION, h in HOUR] >= 0
 end
 
 #df_DE = CSV.read("C:\\Users\\Eliso\\Documents\\Chalmers\\Studieår 3\\Läsperiod 4\\MVE347 Miljö och Matematisk Modellering\\energisystemprojektet\\elecOptDE_Exer2b.csv", DataFrame)
@@ -78,7 +79,7 @@ println("\nSetting constraints...")
 @constraints m begin
     #The minimum amount of energy needed.
     ELECTRICITY_NEED[r in REGION, h in HOUR],
-        sum(Electricity[r, p, h]*efficiency[p] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
+        sum(Electricity[r, p, h] for p in PLANT) - BatteryInflow[r,h] >= load[r, h]
 
     #The cap on how much CO_2 we can produce.
     MAX_EMISSION_CAP,
